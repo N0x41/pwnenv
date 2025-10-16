@@ -43,6 +43,20 @@ L'installation se fait en une seule étape.
 
 La première fois que vous utiliserez la commande `pwnenv init`, il configurera automatiquement un environnement Python global dans `~/challenges/.pwnvenv` et y installera `pwntools`.
 
+### Structure des sources
+
+```
+./
+├─ pwnenv                # Script CLI principal
+├─ tools/
+│  ├─ pwnlib_api.py     # API partagée pour les exploits
+│  └─ init_challenge.py # Générateur de structure de projet
+├─ README.md
+└─ DOC.md
+```
+
+Au premier lancement, `pwnenv` copie les scripts Python depuis `tools/` vers `~/challenges/.pwnenv/tools`. Si ces fichiers ne sont pas présents (distribution minimale), il utilisera un fallback intégré (heredocs) pour les générer.
+
 -----
 
 ## Utilisation

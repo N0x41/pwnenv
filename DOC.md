@@ -14,7 +14,7 @@ PwnEnv repose sur un modèle hybride qui sépare la gestion de l'environnement d
 
 * **Un script Bash (`pwnenv`)** agit comme un "chef d'orchestre". Il gère l'environnement du terminal de l'utilisateur (activation du `venv`, changement de répertoire), l'analyse des arguments en ligne de commande, et l'acquisition des binaires. C'est le point d'entrée unique et la face visible de l'outil.
 
-* **Des scripts Python (`init_challenge.py`, `pwnlib_api.py`)** agissent comme des "artisans". Ils sont déployés et appelés par le script Bash pour effectuer des tâches complexes comme la génération de fichiers templates, la création de la structure du projet et la gestion de la configuration.
+* **Des scripts Python (dans le dossier `tools/`)** agissent comme des "artisans" : `init_challenge.py` et `pwnlib_api.py`. Ils sont copiés par `pwnenv` dans `~/challenges/.pwnenv/tools` lors de la première exécution. Si le dossier `tools/` est indisponible, `pwnenv` dispose d'un fallback via heredocs pour les générer.
 
 Le flux d'exécution typique est le suivant :
 `Utilisateur -> pwnenv (Bash) -> init_challenge.py (Python) -> Fichiers du Projet (.json, exploit.py)`
@@ -25,7 +25,7 @@ Le flux d'exécution typique est le suivant :
 ### Auto-Installation (`self_setup`)
 À sa toute première exécution, le script détecte l'absence de l'environnement global (`~/challenges/.pwnvenv`). Il exécute alors une routine d'auto-configuration unique :
 1.  Il crée la structure de dossiers `~/challenges/.pwnvenv/tools`.
-2.  Il écrit les scripts Python (`pwnlib_api.py`, `init_challenge.py`), dont le contenu est stocké en interne via des "heredocs" (`cat << EOF`), dans le dossier `tools`.
+2.  Il copie les scripts Python (`pwnlib_api.py`, `init_challenge.py`) depuis le dossier `tools/` du dépôt (ou `PWNENV_TOOLS_PATH` si défini) vers `~/challenges/.pwnenv/tools`. Si indisponibles, il les génère via des heredocs embarqués.
 3.  Il crée l'environnement virtuel (`venv`) et y installe `pwntools`.
 4.  L'environnement d'exécution des exploits présuppose la présence de `tmux` pour permettre le split automatique du terminal lors de l'utilisation de GDB/Pwndbg.
 L'outil est donc entièrement autonome après sa création initiale.

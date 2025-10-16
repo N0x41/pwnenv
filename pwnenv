@@ -8,6 +8,7 @@
 CHALLENGES_DIR=~/challenges;
 VENV_DIR="$CHALLENGES_DIR/.pwnenv";
 TOOLS_DIR="$VENV_DIR/tools";
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)";
 INIT_SCRIPT_PATH="$TOOLS_DIR/init_challenge.py"
 API_SCRIPT_PATH="$TOOLS_DIR/pwnlib_api.py"
 
@@ -47,8 +48,15 @@ function self_setup {
     sleep 0.5
     mkdir -p "$TOOLS_DIR"
 
-    # --- Déploiement du script pwnlib_api.py ---
-    cat > "$API_SCRIPT_PATH" << 'EOF'
+    # Si des sources sont disponibles à côté du script (ou via PWNENV_TOOLS_PATH), on les copie. Sinon, fallback heredoc.
+    PWNENV_TOOLS_PATH_DEFAULT="$SCRIPT_DIR/tools"
+    PWNENV_TOOLS_PATH="${PWNENV_TOOLS_PATH:-$PWNENV_TOOLS_PATH_DEFAULT}"
+    if [ -f "$PWNENV_TOOLS_PATH/pwnlib_api.py" ] && [ -f "$PWNENV_TOOLS_PATH/init_challenge.py" ]; then
+        cp "$PWNENV_TOOLS_PATH/pwnlib_api.py" "$API_SCRIPT_PATH"
+        cp "$PWNENV_TOOLS_PATH/init_challenge.py" "$INIT_SCRIPT_PATH"
+    else
+        # --- Déploiement du script pwnlib_api.py (fallback) ---
+        cat > "$API_SCRIPT_PATH" << 'EOF'
 # pwnlib_api.py
 from pwn import *
 import json
@@ -106,8 +114,8 @@ class Pipeline:
             if p and p.connected(): p.close()
 EOF
 
-    # --- Déploiement du script init_challenge.py ---
-    cat > "$INIT_SCRIPT_PATH" << 'EOF'
+        # --- Déploiement du script init_challenge.py (fallback) ---
+        cat > "$INIT_SCRIPT_PATH" << 'EOF'
 #!/usr/bin/env python3
 import argparse, shutil, stat, json
 from pathlib import Path
@@ -176,6 +184,7 @@ def main():
 
 if __name__ == "__main__": main()
 EOF
+    fi
 
     echo -e "${YELLOW}Création de l'environnement virtuel global...${NC}"
     sleep 0.1
