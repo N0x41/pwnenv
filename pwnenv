@@ -20,7 +20,7 @@ CYAN='\033[0;36m';
 BOLD='\033[1m';
 NC='\033[0m';
 
-PWNENV_VERSION="3.1.2";
+PWNENV_VERSION="3.1.3";
 
 function show_help {
     echo -e "${BOLD}${GREEN}PwnEnv - v${PWNENV_VERSION} - Just make Pwn${NC}"
@@ -48,150 +48,22 @@ function self_setup {
     sleep 0.5
     mkdir -p "$TOOLS_DIR"
 
-    # Si des sources sont disponibles à côté du script (ou via PWNENV_TOOLS_PATH), on les copie. Sinon, fallback heredoc.
+    # Copie obligatoire depuis tools/ (ou PWNENV_TOOLS_PATH) sans fallback
     PWNENV_TOOLS_PATH_DEFAULT="$SCRIPT_DIR/tools"
     PWNENV_TOOLS_PATH="${PWNENV_TOOLS_PATH:-$PWNENV_TOOLS_PATH_DEFAULT}"
-    if [ -f "$PWNENV_TOOLS_PATH/pwnlib_api.py" ] && [ -f "$PWNENV_TOOLS_PATH/init_challenge.py" ]; then
-        cp "$PWNENV_TOOLS_PATH/pwnlib_api.py" "$API_SCRIPT_PATH"
-        cp "$PWNENV_TOOLS_PATH/init_challenge.py" "$INIT_SCRIPT_PATH"
-    else
-        # --- Déploiement du script pwnlib_api.py (fallback) ---
-        cat > "$API_SCRIPT_PATH" << 'EOF'
-# pwnlib_api.py
-from pwn import *
-import json
-from pathlib import Path
-
-class Pipeline:
-    def __init__(self, os='linux', arch='amd64', endian='little', log_level='INFO'):
-        self.conf = {}
-        conf_path = Path('pwnenv.conf.json')
-        if conf_path.exists():
-            with conf_path.open('r') as f: self.conf = json.load(f)
-        
-        self.binary_path = self.conf.get('binary_path_local') # CORRECTION: Utilisation de la config pour définir le chemin
-        
-        context(os=os, arch=arch, endian=endian)
-        context.log_level = log_level
-        context.terminal = ['tmux', 'splitw', '-v']
-        
-        if self.binary_path: self.elf = context.binary = ELF(self.binary_path, checksec=False) # CORRECTION: Utilisation de self.binary_path
-        else: self.elf = None
-            
-        self.p = None; self.steps = []; self.state = {}
-
-    def connect(self, mode='LOCAL', breakpoint=None):
-        if mode == 'DEBUG':
-            if not self.binary_path: log.error("Chemin du binaire requis pour DEBUG."); exit(1)
-            gdbscript = "source /usr/share/pwndbg/gdbinit.py\\n"
-            if breakpoint:
-                if isinstance(breakpoint, int): gdbscript += f'break *{hex(breakpoint)}\\n'
-                else: gdbscript += f'break {breakpoint}\\n'
-            gdbscript += "continue"
-            self.p = gdb.debug(self.binary_path, gdbscript=gdbscript)
-        elif mode == 'REMOTE':
-            ssh_conf = {k: self.conf.get(f"ssh_{k}") for k in ['host', 'port', 'user', 'password']}
-            if not all(ssh_conf.values()): log.error("Infos SSH manquantes dans pwnenv.conf.json"); exit(1)
-            ssh_conn = ssh(**ssh_conf)
-            self.p = ssh_conn.process(self.conf.get('binary_path_remote'))
-        else: # LOCAL
-            if not self.binary_path: log.error("Chemin du binaire requis pour LOCAL."); exit(1)
-            self.p = process(self.binary_path) # CORRECTION: Suppression du "else:" en trop
-        return self.p
-
-    def step(self, func): self.steps.append(func); return func
-
-    def run(self, mode='LOCAL', breakpoint=None): # CORRECTION: host et port retirés, car lus depuis la config
-        p = self.connect(mode, breakpoint)
-        if not self.steps: log.warning("Aucune étape définie. Passage en mode interactif.")
-        try:
-            for func in self.steps:
-                log.info(f"--- Étape : {func.__name__} ---"); func(self, p)
-            log.success("Toutes les étapes exécutées.")
-            if p and p.connected(): p.interactive()
-        except Exception as e: log.error(f"Erreur du pipeline : {e}")
-        finally:
-            if p and p.connected(): p.close()
-EOF
-
-        # --- Déploiement du script init_challenge.py (fallback) ---
-        cat > "$INIT_SCRIPT_PATH" << 'EOF'
-#!/usr/bin/env python3
-import argparse, shutil, stat, json
-from pathlib import Path
-
-PWNLIB_API_TEMPLATE = "from pwnlib_api import Pipeline, build_fsb" # L'import est maintenant suffisant
-EXPLOIT_PY_TEMPLATE = """
-#!/usr/bin/env python3
-from pwn import *
-from pwnlib_api import Pipeline
-
-pipeline = None
-@Pipeline.step
-def example_step(self, p):
-    log.info("Modifie-moi pour ton exploit.")
-    if self.p: # Ne rien faire si aucun binaire n'est chargé
-        pass
-
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Script d'exploitation pour {project_name}")
-    parser.add_argument("mode", nargs='?', default='LOCAL', choices=['LOCAL', 'DEBUG', 'REMOTE'])
-    parser.add_argument("-b", "--breakpoint", type=str)
-    
-    pipeline = Pipeline()
-    pipeline.steps.append(example_step)
-    
-    args = parser.parse_args()
-    breakpoint = args.breakpoint
-    if breakpoint and breakpoint.startswith('0x'): breakpoint = int(breakpoint, 16)
-    
-    pipeline.run(mode=args.mode.upper(), breakpoint=breakpoint)
-"""
-
-def main():
-    parser = argparse.ArgumentParser()
-    parser.add_argument("project_path", type=Path)
-    parser.add_argument("--binary-path", type=Path, default=None)
-    parser.add_argument("--ssh-host", type=str); parser.add_argument("--ssh-port", type=int)
-    parser.add_argument("--ssh-user", type=str); parser.add_argument("--ssh-password", type=str)
-    parser.add_argument("--ssh-remote-path", type=str)
-    args = parser.parse_args()
-
-    project_dir, binary_path = args.project_path, args.binary_path
-    if project_dir.exists(): print(f"❌ Erreur : '{project_dir}' existe déjà."); exit(1)
-
-    bin_dir = project_dir / 'bin'; src_dir = project_dir / 'src'
-    src_dir.mkdir(parents=True)
-    
-    binary_name = None
-    if binary_path:
-        bin_dir.mkdir(); binary_name = binary_path.name
-        dest_binary = bin_dir / binary_name
-        shutil.copy(binary_path, dest_binary)
-        dest_binary.chmod(dest_binary.stat().st_mode | stat.S_IEXEC)
-
-    config = {'binary_path_local': f"./bin/{binary_name}" if binary_name else None,
-              'binary_path_remote': args.ssh_remote_path, 'ssh_host': args.ssh_host,
-              'ssh_port': args.ssh_port, 'ssh_user': args.ssh_user, 'ssh_password': args.ssh_password}
-    
-    with (project_dir / 'pwnenv.conf.json').open('w') as f: json.dump(config, f, indent=4)
-    
-    exploit_content = EXPLOIT_PY_TEMPLATE.format(project_name=project_dir.name)
-    exploit_script_path = project_dir / 'exploit.py'
-    exploit_script_path.write_text(exploit_content)
-    exploit_script_path.chmod(0o755)
-    print(f"✅ Structure du projet '{project_dir.name}' créée.")
-
-if __name__ == "__main__": main()
-EOF
+    if [ ! -f "$PWNENV_TOOLS_PATH/pwnlib_api.py" ] || [ ! -f "$PWNENV_TOOLS_PATH/init_challenge.py" ]; then
+        echo -e "${RED}Erreur: Scripts introuvables dans '$PWNENV_TOOLS_PATH'.${NC}"
+        exit 1
     fi
+    cp "$PWNENV_TOOLS_PATH/pwnlib_api.py" "$API_SCRIPT_PATH"
+    cp "$PWNENV_TOOLS_PATH/init_challenge.py" "$INIT_SCRIPT_PATH"
 
     echo -e "${YELLOW}Création de l'environnement virtuel global...${NC}"
     sleep 0.1
     python3 -m venv "$VENV_DIR"
     echo -e "${YELLOW}Installation de Pwntools...${NC}"
     sleep 0.7
-    "$VENV_DIR/bin/pip" install pwntools
+    "$VENV_DIR/bin/pip" install -q pwntools > /dev/null 2>&1
     echo -e "${GREEN}Environnement PwnEnv prêt !${NC}"
     sleep 0.5
 }
