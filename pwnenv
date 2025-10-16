@@ -1,0 +1,260 @@
+#!/bin/bash
+
+# ==============================================================================
+# PWNENV - Gestionnaire d'environnement et de projets de Pwn
+# ==============================================================================
+
+# --- Configuration Globale ---
+CHALLENGES_DIR=~/challenges;
+VENV_DIR="$CHALLENGES_DIR/.pwnenv";
+TOOLS_DIR="$VENV_DIR/tools";
+INIT_SCRIPT_PATH="$TOOLS_DIR/init_challenge.py"
+
+# --- Gestion des couleurs ---
+GREEN='\033[0;32m';
+YELLOW='\033[1;33m';
+RED='\033[0;31m';
+CYAN='\033[0;36m';
+BOLD='\033[1m';
+NC='\033[0m';
+
+function show_help {
+    echo -e "${BOLD}${GREEN}PwnEnv - Gestionnaire d'environnement pour challenges de Pwn${NC}"
+    echo "Usage: pwnenv <commande> [arguments]"
+    echo -e "\n  ${CYAN}init${NC} <nom_projet> [source] [options_ssh]   Initialise un challenge."
+    echo -e "  ${CYAN}go${NC}   <nom_projet>                          Se déplace dans un projet et active l'environnement."
+    echo -e "\n${BOLD}SOURCES POUR 'init' :${NC}"
+    echo -e "  ${YELLOW}--local${NC} /chemin/binaire      Utilise un binaire local."
+    echo -e "  ${YELLOW}--ssh${NC} user@host:/path/bin   Télécharge un binaire via SCP."
+    echo -e "  (aucune source)                 Crée un projet vide."
+    echo -e "\n${BOLD}OPTIONS SSH POUR 'init' (sauvegardées pour l'exploit) :${NC}"
+    echo -e "  ${YELLOW}--ssh-host${NC} <host>             Nom d'hôte pour l'exécution distante."
+    echo -e "  ${YELLOW}--ssh-user${NC} <user>             Utilisateur pour l'exécution distante."
+    echo -e "  ${YELLOW}--ssh-port${NC} <port>             Port SSH."
+    echo -e "  ${YELLOW}--ssh-password${NC} <mdp>          Mot de passe SSH."
+}
+
+# Crée l'environnement et déploie les scripts la première fois
+function self_setup {
+    if [ -d "$VENV_DIR" ]; then
+        return 0 # Déjà configuré
+    fi
+
+    echo -e "${YELLOW}Première utilisation. Configuration de l'environnement global...${NC}"
+    mkdir -p "$TOOLS_DIR"
+
+    # --- Déploiement du script pwnlib_api.py ---
+    cat > "$API_SCRIPT_PATH" << 'EOF'
+# pwnlib_api.py
+from pwn import *
+import json
+from pathlib import Path
+
+class Pipeline:
+    def __init__(self, os='linux', arch='amd64', endian='little', log_level='INFO'):
+        self.conf = {}
+        conf_path = Path('pwnenv.conf.json')
+        if conf_path.exists():
+            with conf_path.open('r') as f: self.conf = json.load(f)
+        
+        self.binary_path = self.conf.get('binary_path_local') # CORRECTION: Utilisation de la config pour définir le chemin
+        
+        context(os=os, arch=arch, endian=endian)
+        context.log_level = log_level
+        context.terminal = ['tmux', 'splitw', '-v']
+        
+        if self.binary_path: self.elf = context.binary = ELF(self.binary_path, checksec=False) # CORRECTION: Utilisation de self.binary_path
+        else: self.elf = None
+            
+        self.p = None; self.steps = []; self.state = {}
+
+    def connect(self, mode='LOCAL', breakpoint=None):
+        if mode == 'DEBUG':
+            if not self.binary_path: log.error("Chemin du binaire requis pour DEBUG."); exit(1)
+            gdbscript = "source /usr/share/pwndbg/gdbinit.py\\n"
+            if breakpoint:
+                if isinstance(breakpoint, int): gdbscript += f'break *{hex(breakpoint)}\\n'
+                else: gdbscript += f'break {breakpoint}\\n'
+            gdbscript += "continue"
+            self.p = gdb.debug(self.binary_path, gdbscript=gdbscript)
+        elif mode == 'REMOTE':
+            ssh_conf = {k: self.conf.get(f"ssh_{k}") for k in ['host', 'port', 'user', 'password']}
+            if not all(ssh_conf.values()): log.error("Infos SSH manquantes dans pwnenv.conf.json"); exit(1)
+            ssh_conn = ssh(**ssh_conf)
+            self.p = ssh_conn.process(self.conf.get('binary_path_remote'))
+        else: # LOCAL
+            if not self.binary_path: log.error("Chemin du binaire requis pour LOCAL."); exit(1)
+            self.p = process(self.binary_path) # CORRECTION: Suppression du "else:" en trop
+        return self.p
+
+    def step(self, func): self.steps.append(func); return func
+
+    def run(self, mode='LOCAL', breakpoint=None): # CORRECTION: host et port retirés, car lus depuis la config
+        p = self.connect(mode, breakpoint)
+        if not self.steps: log.warning("Aucune étape définie. Passage en mode interactif.")
+        try:
+            for func in self.steps:
+                log.info(f"--- Étape : {func.__name__} ---"); func(self, p)
+            log.success("Toutes les étapes exécutées.")
+            if p and p.connected(): p.interactive()
+        except Exception as e: log.error(f"Erreur du pipeline : {e}")
+        finally:
+            if p and p.connected(): p.close()
+EOF
+
+    # --- Déploiement du script init_challenge.py ---
+    cat > "$INIT_SCRIPT_PATH" << 'EOF'
+#!/usr/bin/env python3
+import argparse, shutil, stat, json
+from pathlib import Path
+
+PWNLIB_API_TEMPLATE = "from pwnlib_api import Pipeline, build_fsb" # L'import est maintenant suffisant
+EXPLOIT_PY_TEMPLATE = """
+#!/usr/bin/env python3
+from pwn import *
+from pwnlib_api import Pipeline
+
+pipeline = None
+@Pipeline.step
+def example_step(self, p):
+    log.info("Modifie-moi pour ton exploit.")
+    if self.p: # Ne rien faire si aucun binaire n'est chargé
+        pass
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Script d'exploitation pour {project_name}")
+    parser.add_argument("mode", nargs='?', default='LOCAL', choices=['LOCAL', 'DEBUG', 'REMOTE'])
+    parser.add_argument("-b", "--breakpoint", type=str)
+    
+    pipeline = Pipeline()
+    pipeline.steps.append(example_step)
+    
+    args = parser.parse_args()
+    breakpoint = args.breakpoint
+    if breakpoint and breakpoint.startswith('0x'): breakpoint = int(breakpoint, 16)
+    
+    pipeline.run(mode=args.mode.upper(), breakpoint=breakpoint)
+"""
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("project_path", type=Path)
+    parser.add_argument("--binary-path", type=Path, default=None)
+    parser.add_argument("--ssh-host", type=str); parser.add_argument("--ssh-port", type=int)
+    parser.add_argument("--ssh-user", type=str); parser.add_argument("--ssh-password", type=str)
+    parser.add_argument("--ssh-remote-path", type=str)
+    args = parser.parse_args()
+
+    project_dir, binary_path = args.project_path, args.binary_path
+    if project_dir.exists(): print(f"❌ Erreur : '{project_dir}' existe déjà."); exit(1)
+
+    bin_dir = project_dir / 'bin'; src_dir = project_dir / 'src'
+    src_dir.mkdir(parents=True)
+    
+    binary_name = None
+    if binary_path:
+        bin_dir.mkdir(); binary_name = binary_path.name
+        dest_binary = bin_dir / binary_name
+        shutil.copy(binary_path, dest_binary)
+        dest_binary.chmod(dest_binary.stat().st_mode | stat.S_IEXEC)
+
+    config = {'binary_path_local': f"./bin/{binary_name}" if binary_name else None,
+              'binary_path_remote': args.ssh_remote_path, 'ssh_host': args.ssh_host,
+              'ssh_port': args.ssh_port, 'ssh_user': args.ssh_user, 'ssh_password': args.ssh_password}
+    
+    with (project_dir / 'pwnenv.conf.json').open('w') as f: json.dump(config, f, indent=4)
+    
+    exploit_content = EXPLOIT_PY_TEMPLATE.format(project_name=project_dir.name)
+    exploit_script_path = project_dir / 'exploit.py'
+    exploit_script_path.write_text(exploit_content)
+    exploit_script_path.chmod(0o755)
+    print(f"✅ Structure du projet '{project_dir.name}' créée.")
+
+if __name__ == "__main__": main()
+EOF
+
+    echo -e "${YELLOW}Création de l'environnement virtuel global...${NC}"
+    python3 -m venv "$VENV_DIR"
+    echo -e "${YELLOW}Installation de Pwntools...${NC}"
+    "$VENV_DIR/bin/pip" install pwntools
+    echo -e "${GREEN}Environnement PwnEnv prêt !${NC}"
+}
+
+# ==============================================================================
+# LOGIQUE PRINCIPALE
+# ==============================================================================
+mkdir -p "$CHALLENGES_DIR"
+COMMAND=$1; shift
+self_setup
+source "$VENV_DIR/bin/activate"
+export PYTHONPATH="$PYTHONPATH:$TOOLS_DIR"
+
+case $COMMAND in
+    init)
+        PROJECT_NAME=$1
+        if [ -z "$PROJECT_NAME" ]; then echo -e "${RED}Erreur: 'init' requiert un nom de projet.${NC}"; show_help; exit 1; fi
+        PROJECT_PATH="$CHALLENGES_DIR/$PROJECT_NAME"
+        shift
+        
+        # Analyse avancée des arguments
+        declare -A a_args # Associative array
+        while (( "$#" )); do
+            case "$1" in
+                --local|--ssh|--ssh-host|--ssh-user|--ssh-port|--ssh-password)
+                    a_args[$1]="$2"; shift 2;;
+                *) echo -e "${RED}Option inconnue: $1${NC}"; show_help; exit 1;;
+            esac
+        done
+        
+        echo -e "${CYAN}Initialisation du challenge '$PROJECT_NAME'...${NC}"
+        
+        CMD_ARGS=("$PROJECT_PATH")
+        TEMP_BINARY_PATH=$(mktemp)
+        
+        if [[ -v a_args[--local] ]]; then
+            echo "Source: Binaire local (${a_args[--local]})"
+            cp "${a_args[--local]}" "$TEMP_BINARY_PATH"
+            CMD_ARGS+=("--binary-path" "$TEMP_BINARY_PATH")
+        elif [[ -v a_args[--ssh] ]]; then
+            echo "Source: SSH (${a_args[--ssh]})"
+            SCP_CMD="scp"
+            if [[ -v a_args[--ssh-port] ]]; then SCP_CMD+=" -P ${a_args[--ssh-port]}"; fi
+            if [[ -v a_args[--ssh-password] ]]; then
+                if ! command -v sshpass &> /dev/null; then echo -e "${RED}Erreur: 'sshpass' requis.${NC}"; exit 1; fi
+                SCP_CMD="sshpass -p '${a_args[--ssh-password]}' $SCP_CMD"
+            fi
+            eval "$SCP_CMD '${a_args[--ssh]}' '$TEMP_BINARY_PATH'"
+            if [ $? -ne 0 ]; then echo -e "${RED}Échec du SCP.${NC}"; rm "$TEMP_BINARY_PATH"; exit 1; fi
+            CMD_ARGS+=("--binary-path" "$TEMP_BINARY_PATH")
+            # Le chemin distant du binaire est l'argument de --ssh
+            a_args[--ssh-remote-path]="${a_args[--ssh]#*:}"
+        fi
+
+        # Passer les arguments SSH au script python
+        for key in "${!a_args[@]}"; do
+            CMD_ARGS+=("$key" "${a_args[$key]}")
+        done
+
+        python3 "$INIT_SCRIPT_PATH" "${CMD_ARGS[@]}"
+        rm -f "$TEMP_BINARY_PATH"
+        
+        if [ $? -ne 0 ]; then echo -e "${RED}L'initialisation a échoué.${NC}"; exit 1; fi
+
+        echo -e "\n${GREEN}Projet initialisé. Activation de l'environnement...${NC}"
+        cd "$PROJECT_PATH"
+        exec "$SHELL"
+        ;;
+    go)
+        PROJECT_NAME=$1
+        if [ -z "$PROJECT_NAME" ]; then echo -e "${RED}Erreur: 'go' requiert un nom de projet.${NC}"; show_help; exit 1; fi
+        PROJECT_PATH="$CHALLENGES_DIR/$PROJECT_NAME"
+        if [ ! -d "$PROJECT_PATH" ]; then echo -e "${RED}Erreur: Le projet '$PROJECT_NAME' n'existe pas.${NC}"; exit 1; fi
+        cd "$PROJECT_PATH"
+        echo -e "${GREEN}Déplacement vers '$PROJECT_NAME'... (environnement déjà actif)${NC}"
+        exec "$SHELL"
+        ;;
+
+    *)
+        show_help; exit 1;
+        ;;
+esac

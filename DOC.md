@@ -1,0 +1,79 @@
+---
+## `DOC.md`
+
+Ce fichier contient la documentation technique qui détaille le fonctionnement interne de l'outil.
+
+```markdown
+# Documentation Technique de PwnEnv
+
+Ce document détaille l'architecture et le fonctionnement interne de l'outil `pwnenv`.
+
+## 1. Architecture Générale
+
+PwnEnv repose sur un modèle hybride qui sépare la gestion de l'environnement de la génération des fichiers :
+
+* **Un script Bash (`pwnenv`)** agit comme un "chef d'orchestre". Il gère l'environnement du terminal de l'utilisateur (activation du `venv`, changement de répertoire), l'analyse des arguments en ligne de commande, et l'acquisition des binaires. C'est le point d'entrée unique et la face visible de l'outil.
+
+* **Des scripts Python (`init_challenge.py`, `pwnlib_api.py`)** agissent comme des "artisans". Ils sont déployés et appelés par le script Bash pour effectuer des tâches complexes comme la génération de fichiers templates, la création de la structure du projet et la gestion de la configuration.
+
+Le flux d'exécution typique est le suivant :
+`Utilisateur -> pwnenv (Bash) -> init_challenge.py (Python) -> Fichiers du Projet (.json, exploit.py)`
+
+---
+## 2. Le Script `pwnenv` (Bash)
+
+### Auto-Installation (`self_setup`)
+À sa toute première exécution, le script détecte l'absence de l'environnement global (`~/challenges/.pwnvenv`). Il exécute alors une routine d'auto-configuration unique :
+1.  Il crée la structure de dossiers `~/challenges/.pwnvenv/tools`.
+2.  Il écrit les scripts Python (`pwnlib_api.py`, `init_challenge.py`), dont le contenu est stocké en interne via des "heredocs" (`cat << EOF`), dans le dossier `tools`.
+3.  Il crée l'environnement virtuel (`venv`) et y installe `pwntools`.
+L'outil est donc entièrement autonome après sa création initiale.
+
+### Commande `init`
+C'est la commande la plus complexe. Sa logique est la suivante :
+1.  **Analyse des Arguments** : Une boucle `while` analyse les arguments pour identifier la source du binaire (`--local`, `--ssh`) et les options de connexion (`--ssh-host`, etc.).
+2.  **Acquisition du Binaire** : Selon la source, il copie (`cp`) ou télécharge (`scp`) le binaire dans un fichier temporaire. La commande `scp` est construite dynamiquement pour inclure le port (`-P`) et le mot de passe (`sshpass`) si nécessaire.
+3.  **Appel du Script Python** : Il exécute `init_challenge.py`, en lui passant le chemin du projet et toutes les options parsées (chemin du binaire temporaire, informations SSH) comme arguments de script.
+4.  **Gestion de l'Environnement** : Après une création de projet réussie, il se déplace dans le nouveau dossier et exécute `exec "$SHELL"`. Cette commande remplace le processus shell actuel par un nouveau, ce qui permet à l'utilisateur de rester dans le nouveau répertoire avec l'environnement virtuel activé.
+
+### Commande `go`
+Une commande simple qui se déplace dans un dossier de projet existant et exécute la même logique d'activation d'environnement que `init`.
+
+---
+## 3. Les Scripts Python Déployés
+
+### `init_challenge.py`
+Ce script est le générateur de projet.
+1.  Il reçoit les informations de `pwnenv` via `argparse`.
+2.  Il crée la structure de dossiers `bin`/`src`.
+3.  Il copie le binaire depuis le chemin temporaire vers le dossier `bin` final.
+4.  Il génère le fichier de configuration `pwnenv.conf.json`.
+5.  Il génère le script `exploit.py` à partir d'un template interne, en y injectant les informations pertinentes.
+
+### `pwnlib_api.py`
+C'est la librairie partagée par tous les projets. Elle est importée dynamiquement grâce au `PYTHONPATH` modifié par `pwnenv`.
+* **Classe `Pipeline`** : Le cœur de la librairie.
+* **`__init__`** : À l'initialisation, la classe cherche et charge le fichier `pwnenv.conf.json` du projet courant. Elle configure le contexte `pwntools` et définit le chemin du binaire local à partir de la configuration.
+* **`connect`** : Cette méthode utilise la configuration chargée pour se connecter. Si `mode='REMOTE'`, elle utilise les informations `ssh_*` du fichier de configuration pour établir une connexion `pwnlib.ssh` et lancer le processus distant.
+* **`@step` et `run`** : Implémentent un système de pipeline simple et déclaratif pour structurer le code de l'exploit.
+
+---
+## 4. Le Flux de Données (`pwnenv.conf.json`)
+
+Ce fichier JSON est la "colle" qui lie la configuration du projet à l'exécution de l'exploit.
+
+* **Création** : Il est généré par `init_challenge.py` lors de l'initialisation avec les informations fournies à `pwnenv`.
+* **Lecture** : Il est lu par `pwnlib_api.py` chaque fois qu'un script d'exploit est lancé.
+
+Cela permet de dissocier la configuration (qui ne se fait qu'une fois) de l'exécution (qui peut être répétée en mode `LOCAL`, `DEBUG`, ou `REMOTE` sans changer les arguments).
+
+**Exemple de structure :**
+```json
+{
+    "binary_path_local": "./bin/my_binary",
+    "binary_path_remote": "/path/on/server/my_binary",
+    "ssh_host": "pwn.challenge.com",
+    "ssh_port": 2222,
+    "ssh_user": "user",
+    "ssh_password": "password123"
+}
