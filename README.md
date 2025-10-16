@@ -1,5 +1,7 @@
 # PwnEnv - Gestionnaire d'Environnement de Pwn
 
+[![Version](https://img.shields.io/badge/version-3.1.1-blue.svg)](https://github.com/N0x41/pwnenv)
+[![Python](https://img.shields.io/badge/python-3.9+-green.svg)](https://python.org)
 ![Language](https://img.shields.io/badge/language-Bash%20%26%20Python-blue.svg)
 ![Platform](https://img.shields.io/badge/platform-Linux-lightgrey.svg)
 ![License](https://img.shields.io/badge/license-MIT-green.svg)
@@ -12,7 +14,7 @@ PwnEnv est un outil en ligne de commande pour initialiser et gérer rapidement d
 ## Dépendances
 
 Assurez-vous que les outils suivants sont installés sur votre système :
-* **Python 3.x** et le module `venv`
+* **Python 3.9+** et le module `venv`
 * **git** (utilisé par `pwntools` pour l'installation)
 * **sshpass** (optionnel, pour utiliser l'option `--password` avec SSH)
 * **pwndbg** (recommandé, pour le débogage. Le chemin est configuré par défaut sur `/usr/share/pwndbg/gdbinit.py`)
