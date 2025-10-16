@@ -9,6 +9,7 @@ CHALLENGES_DIR=~/challenges;
 VENV_DIR="$CHALLENGES_DIR/.pwnenv";
 TOOLS_DIR="$VENV_DIR/tools";
 INIT_SCRIPT_PATH="$TOOLS_DIR/init_challenge.py"
+API_SCRIPT_PATH="$TOOLS_DIR/pwnlib_api.py"
 
 # --- Gestion des couleurs ---
 GREEN='\033[0;32m';
@@ -18,8 +19,10 @@ CYAN='\033[0;36m';
 BOLD='\033[1m';
 NC='\033[0m';
 
+PWNENV_VERSION="3.1.1";
+
 function show_help {
-    echo -e "${BOLD}${GREEN}PwnEnv - Gestionnaire d'environnement pour challenges de Pwn${NC}"
+    echo -e "${BOLD}${GREEN}PwnEnv - v${PWNENV_VERSION} - Just make Pwn${NC}"
     echo "Usage: pwnenv <commande> [arguments]"
     echo -e "\n  ${CYAN}init${NC} <nom_projet> [source] [options_ssh]   Initialise un challenge."
     echo -e "  ${CYAN}go${NC}   <nom_projet>                          Se déplace dans un projet et active l'environnement."
@@ -41,6 +44,7 @@ function self_setup {
     fi
 
     echo -e "${YELLOW}Première utilisation. Configuration de l'environnement global...${NC}"
+    sleep 0.5
     mkdir -p "$TOOLS_DIR"
 
     # --- Déploiement du script pwnlib_api.py ---
@@ -174,10 +178,13 @@ if __name__ == "__main__": main()
 EOF
 
     echo -e "${YELLOW}Création de l'environnement virtuel global...${NC}"
+    sleep 0.1
     python3 -m venv "$VENV_DIR"
     echo -e "${YELLOW}Installation de Pwntools...${NC}"
+    sleep 0.7
     "$VENV_DIR/bin/pip" install pwntools
     echo -e "${GREEN}Environnement PwnEnv prêt !${NC}"
+    sleep 0.5
 }
 
 # ==============================================================================
@@ -191,6 +198,7 @@ export PYTHONPATH="$PYTHONPATH:$TOOLS_DIR"
 
 case $COMMAND in
     init)
+        echo -e "${BOLD}${GREEN}PwnEnv - v${PWNENV_VERSION} - Just make Pwn${NC}"
         PROJECT_NAME=$1
         if [ -z "$PROJECT_NAME" ]; then echo -e "${RED}Erreur: 'init' requiert un nom de projet.${NC}"; show_help; exit 1; fi
         PROJECT_PATH="$CHALLENGES_DIR/$PROJECT_NAME"
@@ -245,6 +253,7 @@ case $COMMAND in
         exec "$SHELL"
         ;;
     go)
+        echo -e "${BOLD}${GREEN}PwnEnv - v${PWNENV_VERSION} - Just make Pwn${NC}"
         PROJECT_NAME=$1
         if [ -z "$PROJECT_NAME" ]; then echo -e "${RED}Erreur: 'go' requiert un nom de projet.${NC}"; show_help; exit 1; fi
         PROJECT_PATH="$CHALLENGES_DIR/$PROJECT_NAME"
