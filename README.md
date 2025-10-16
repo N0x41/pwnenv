@@ -1,6 +1,6 @@
 # PwnEnv - Gestionnaire d'Environnement de Pwn
 
-[![Version](https://img.shields.io/badge/version-3.1.1-blue.svg)](https://github.com/N0x41/pwnenv)
+[![Version](https://img.shields.io/badge/version-3.1.2-blue.svg)](https://github.com/N0x41/pwnenv)
 [![Python](https://img.shields.io/badge/python-3.9+-green.svg)](https://python.org)
 [Installation](https://www.google.com/search?q=%23installation) • [Utilisation](https://www.google.com/search?q=%23utilisation) • [**Documentation Technique (DOC.md)**](https://www.google.com/search?q=DOC.md)
 
@@ -16,6 +16,7 @@ Assurez-vous que les outils suivants sont installés sur votre système :
   * **git** (utilisé par `pwntools` pour l'installation)
   * **sshpass** (optionnel, pour utiliser l'option `--password` avec SSH)
   * **pwndbg** (recommandé, pour le débogage. Le chemin est configuré par défaut sur `/usr/share/pwndbg/gdbinit.py`)
+  * **tmux** (recommandé, pour le split automatique du terminal lors du DEBUG; fonctionne aussi si vous utilisez Terminator via l'appel tmux)
 
 -----
 

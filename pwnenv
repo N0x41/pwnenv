@@ -19,7 +19,7 @@ CYAN='\033[0;36m';
 BOLD='\033[1m';
 NC='\033[0m';
 
-PWNENV_VERSION="3.1.1";
+PWNENV_VERSION="3.1.2";
 
 function show_help {
     echo -e "${BOLD}${GREEN}PwnEnv - v${PWNENV_VERSION} - Just make Pwn${NC}"

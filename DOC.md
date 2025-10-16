@@ -27,6 +27,7 @@ Le flux d'exécution typique est le suivant :
 1.  Il crée la structure de dossiers `~/challenges/.pwnvenv/tools`.
 2.  Il écrit les scripts Python (`pwnlib_api.py`, `init_challenge.py`), dont le contenu est stocké en interne via des "heredocs" (`cat << EOF`), dans le dossier `tools`.
 3.  Il crée l'environnement virtuel (`venv`) et y installe `pwntools`.
+4.  L'environnement d'exécution des exploits présuppose la présence de `tmux` pour permettre le split automatique du terminal lors de l'utilisation de GDB/Pwndbg.
 L'outil est donc entièrement autonome après sa création initiale.
 
 ### Commande `init`
@@ -54,6 +55,7 @@ Ce script est le générateur de projet.
 C'est la librairie partagée par tous les projets. Elle est importée dynamiquement grâce au `PYTHONPATH` modifié par `pwnenv`.
 * **Classe `Pipeline`** : Le cœur de la librairie.
 * **`__init__`** : À l'initialisation, la classe cherche et charge le fichier `pwnenv.conf.json` du projet courant. Elle configure le contexte `pwntools` et définit le chemin du binaire local à partir de la configuration.
+  * `context.terminal = ['tmux', 'splitw', '-v']` est défini afin d'ouvrir automatiquement un split vertical dans `tmux` pour GDB/Pwndbg. Cela fonctionne également si votre émulateur (ex: Terminator) est utilisé, tant que `tmux` est installé et accessible depuis le PATH.
 * **`connect`** : Cette méthode utilise la configuration chargée pour se connecter. Si `mode='REMOTE'`, elle utilise les informations `ssh_*` du fichier de configuration pour établir une connexion `pwnlib.ssh` et lancer le processus distant.
 * **`@step` et `run`** : Implémentent un système de pipeline simple et déclaratif pour structurer le code de l'exploit.
 
