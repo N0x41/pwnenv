@@ -48,13 +48,14 @@ La première fois que vous utiliserez la commande `pwnenv init`, il configurera 
 ./
 ├─ pwnenv                # Script CLI principal
 ├─ tools/
-│  ├─ pwnlib_api.py     # API partagée pour les exploits
-│  └─ init_challenge.py # Générateur de structure de projet
+│  ├─ pwnenv.mako       # Template pwntools pour le squelette exploit.py
+│  ├─ pwnapi.py         # API partagée pour les exploits et le pipeline
+│  └─ tmux.config       # Layout tmux par défaut
 ├─ README.md
 └─ DOC.md
 ```
 
-Au premier lancement, `pwnenv` copie les scripts Python depuis `tools/` vers `~/challenges/.pwnenv/tools`. Si ces fichiers ne sont pas présents (distribution minimale), il utilisera un fallback intégré (heredocs) pour les générer.
+Au premier lancement, `pwnenv` copie les ressources partagées (`pwnapi.py`, `pwnenv.mako`, configuration tmux, scripts auxiliaires) depuis `tools/` vers `~/challenges/.pwnenv/tools`.
 
 -----
 

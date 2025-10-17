@@ -1,228 +1,104 @@
-<%page args="binary, host=None, port=None, user=None, password=None, libc=None, remote_path=None, quiet=False"/>
+<%page args="binary=None, host=None, port=None, user=None, password=None, libc=None, remote_path=None, quiet=False"/>
 <%
+import json
 import os
 import sys
-import json
 
 from pwnlib.context import context as ctx
 from pwnlib.elf.elf import ELF
+from pwnlib.util.sh_string import sh_string
 from elftools.common.exceptions import ELFError
 
 argv = list(sys.argv)
 argv[0] = os.path.basename(argv[0])
 
-# Charger la configuration pwnenv.conf.json si disponible pour définir des valeurs par défaut
 conf = {}
 try:
-    with open('pwnenv.conf.json', 'r') as f:
-        conf = json.load(f)
+    with open("pwnenv.conf.json", "r", encoding="utf-8") as fp:
+        conf = json.load(fp)
 except Exception:
     conf = {}
 
-conf_binary = conf.get('binary_path_local')
-conf_ssh = conf.get('ssh') if isinstance(conf.get('ssh'), dict) else {}
-conf_libc = conf.get('libc') if isinstance(conf.get('libc'), dict) else {}
-conf_host = conf_ssh.get('host')
-conf_port = conf_ssh.get('port')
-conf_user = conf_ssh.get('user')
-conf_password = conf_ssh.get('pass')
-conf_remote_path = conf_ssh.get('bin')
-conf_libc_local = conf_libc.get('local')
-conf_libc_version = conf_libc.get('version')
-
-binary = binary or conf_binary
-host = host or conf_host
-port = port or conf_port
-user = user or conf_user
-password = password or conf_password
-remote_path = remote_path or conf_remote_path
-libc = libc or conf_libc_local or conf_libc_version
+libc_section = conf.get("libc") if isinstance(conf.get("libc"), dict) else {}
+binary_default = binary or conf.get("binary_path_local") or "./bin/challenge"
+libc_default = libc or libc_section.get("local") or libc_section.get("version")
 
 try:
-    if binary:
-       ctx.binary = ELF(binary, checksec=False)
+    if binary_default:
+        ctx.binary = ELF(binary_default, checksec=False)
 except ELFError:
     pass
 
-if not binary:
-    binary = './path/to/binary'
-
-exe = os.path.basename(binary)
-
-ssh = user or password
-if ssh and not port:
-    port = 22
-elif host and not port:
-    port = 4141
-
-remote_path = remote_path or exe
-password = password or 'secret1234'
-binary_repr = repr(binary)
-libc_repr = repr(libc)
+binary_repr = repr(binary_default)
+libc_repr = repr(libc_default)
 %>
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-%if not quiet:
+% if not quiet:
 # This exploit template was generated via:
 # $ ${' '.join(map(sh_string, argv))}
-%endif
+% endif
+import os
+
 from pwn import *
-from pwnlib_api import Pipeline  # API pwnenv disponible dans le template
+from pwnapi import Pipeline
 
-%if not quiet:
-# Set up pwntools for the correct architecture
-%endif
-%if ctx.binary or not host:
-exe = context.binary = ELF(args.EXE or ${binary_repr})
-<% binary_repr = 'exe.path' %>
-%else:
-context.update(arch='i386')
-exe = ${binary_repr}
-<% binary_repr = 'exe' %>
-%endif
+pipeline = Pipeline()
+pipeline.print_summary()
 
-%if not quiet:
-# Many built-in settings can be controlled on the command-line and show up
-# in "args".  For example, to dump all data sent/received, and disable ASLR
-# for all created processes...
-# ./exploit.py DEBUG NOASLR
-%if host or port or user:
-# ./exploit.py GDB HOST=example.com PORT=4141 EXE=/tmp/executable
-%endif
-%endif
-%if host:
-host = args.HOST or ${repr(host)}
-%endif
-%if port:
-port = int(args.PORT or ${port})
-%endif
-%if user:
-user = args.USER or ${repr(user)}
-password = args.PASSWORD or ${repr(password)}
-%endif
-%if ssh:
-remote_path = ${repr(remote_path)}
-%endif
+LOCAL_BIN = args.EXE or pipeline.binary_path or ${binary_repr}
+LOCAL_BIN = str(LOCAL_BIN) if LOCAL_BIN else None
+LIBC_PATH = args.LIBC or pipeline.libc_path or ${libc_repr}
+LIBC_PATH = str(LIBC_PATH) if LIBC_PATH else None
 
-%if ssh:
-# Connect to the remote SSH server
-shell = None
-if not args.LOCAL:
-    shell = ssh(user, host, port, password)
-    shell.set_working_directory(symlink=True)
-%endif
-
-%if libc:
-%if not quiet:
-# Use the specified remote libc version unless explicitly told to use the
-# local system version with the `LOCAL_LIBC` argument.
-# ./exploit.py LOCAL LOCAL_LIBC
-%endif
-if args.LOCAL_LIBC:
-    libc = exe.libc
-%if host:
-elif args.LOCAL:
-%else:
+if LOCAL_BIN and os.path.exists(LOCAL_BIN):
+    context.binary = ELF(LOCAL_BIN, checksec=False)
+    exe = context.binary
 else:
-%endif
-    library_path = libcdb.download_libraries(${libc_repr})
-    if library_path:
-        exe = context.binary = ELF.patch_custom_libraries(${binary_repr}, library_path)
-        libc = exe.libc
-    else:
-        libc = ELF(${libc_repr})
-%if host:
+    exe = LOCAL_BIN
+
+if LIBC_PATH and os.path.exists(LIBC_PATH):
+    libc = ELF(LIBC_PATH, checksec=False)
 else:
-    libc = ELF(${libc_repr})
-%endif
-%endif
+    libc = None
 
-%if host:
-def start_local(argv=[], *a, **kw):
-    '''Execute the target binary locally'''
-    if args.GDB:
-        return gdb.debug([${binary_repr}] + argv, gdbscript=gdbscript, *a, **kw)
-    else:
-        return process([${binary_repr}] + argv, *a, **kw)
+gdb_lines = ["continue"]
+if context.binary:
+    if "main" in context.binary.symbols:
+        gdb_lines.insert(0, "tbreak main")
+    elif getattr(context.binary, "entry", 0):
+        gdb_lines.insert(0, f"tbreak *0x{context.binary.entry:x}")
+gdbscript = "\n".join(gdb_lines)
 
-def start_remote(argv=[], *a, **kw):
-  %if ssh:
-    '''Execute the target binary on the remote host'''
-    if args.GDB:
-        return gdb.debug([remote_path] + argv, gdbscript=gdbscript, ssh=shell, *a, **kw)
-    else:
-        return shell.process([remote_path] + argv, *a, **kw)
-  %else:
-    '''Connect to the process on the remote host'''
-    io = connect(host, port)
-    if args.GDB:
-        gdb.attach(io, gdbscript=gdbscript)
-    return io
-  %endif
-%endif
+# ---------------------------------------------------------------------------
+# Pipeline steps examples
+# ---------------------------------------------------------------------------
 
-%if host:
-def start(argv=[], *a, **kw):
-    '''Start the exploit against the target.'''
-    if args.LOCAL:
-        return start_local(argv, *a, **kw)
-    else:
-        return start_remote(argv, *a, **kw)
-%else:
-def start(argv=[], *a, **kw):
-    '''Start the exploit against the target.'''
-    if args.GDB:
-        return gdb.debug([${binary_repr}] + argv, gdbscript=gdbscript, *a, **kw)
-    else:
-        return process([${binary_repr}] + argv, *a, **kw)
-%endif
-
-%if exe or remote_path:
-%if not quiet:
-# Specify your GDB script here for debugging
-# GDB will be launched if the exploit is run via e.g.
-# ./exploit.py GDB
-%endif
-gdbscript = '''
-%if ctx.binary:
-  %if 'main' in ctx.binary.symbols:
-tbreak main
-  %elif 'DYN' != ctx.binary.elftype:
-tbreak *0x{exe.entry:x}
-  %endif
-%endif
-continue
-'''.format(**locals())
-%endif
+@pipeline.step
+def leaks(self, tube):
+    """Collect initial data/leaks."""
+    log.info("Reading banner...")
+    try:
+        banner = tube.recvline(timeout=2)
+        log.info("Banner: %r", banner.strip())
+    except EOFError:
+        log.warning("No banner received")
 
 
-%if not quiet:
-#===========================================================
-#                    EXPLOIT GOES HERE
-#===========================================================
-%else:
-# -- Exploit goes here --
-%endif
-%if ctx.binary and not quiet:
-# ${'%-10s%s-%s-%s' % ('Arch:',
-                       ctx.binary.arch,
-                       ctx.binary.bits,
-                       ctx.binary.endian)}
-%for line in ctx.binary.checksec(color=False).splitlines():
-# ${line}
-%endfor
-%endif
+@pipeline.step
+def exploit(self, tube):
+    """Exploit logic placeholder."""
+    payload = b"A" * 16
+    log.info("Sending placeholder payload (%d bytes)", len(payload))
+    tube.sendline(payload)
 
-io = start()
 
-%if not quiet:
-# Exemple d'utilisation de l'API pwnenv si souhaité:
-# from pwnlib_api import Pipeline
-# pipeline = Pipeline()
-# @pipeline.step
-# def example_step(self, p):
-#     log.info("Hello from pwnenv Pipeline")
-# pipeline.run('LOCAL')
-%endif
+@pipeline.step
+def post(self, tube):
+    """Post-exploitation stage."""
+    log.info("Switching to interactive mode")
 
-io.interactive()
+
+if __name__ == "__main__":
+    mode = pipeline.choose_mode()
+    pipeline.run(mode, gdbscript=gdbscript)
