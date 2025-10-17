@@ -12,7 +12,7 @@ Ce document détaille l'architecture et le fonctionnement interne de l'outil `pw
 
 PwnEnv repose sur un modèle hybride qui sépare la gestion de l'environnement de la génération des fichiers :
 
-* **Un script Bash (`pwnenv`)** agit comme un "chef d'orchestre". Il gère l'environnement du terminal de l'utilisateur (activation du `venv`, changement de répertoire), l'analyse des arguments en ligne de commande, et l'acquisition des binaires. C'est le point d'entrée unique et la face visible de l'outil.
+* **Un script Bash (`pwnenv`)** agit comme un "chef d'orchestre". Il gère l'environnement du terminal de l'utilisateur (activation du `venv`, changement de répertoire), l'analyse des arguments en ligne de commande, et la collecte des informations de déploiement. C'est le point d'entrée unique et la face visible de l'outil.
 
 * **Des scripts Python (dans le dossier `tools/`)** agissent comme des "artisans" : `init_challenge.py` et `pwnlib_api.py`. Ils sont copiés par `pwnenv` dans `~/challenges/.pwnenv/tools` lors de la première exécution. Si le dossier `tools/` est indisponible, `pwnenv` dispose d'un fallback via heredocs pour les générer.
 
@@ -32,10 +32,11 @@ L'outil est donc entièrement autonome après sa création initiale.
 
 ### Commande `init`
 C'est la commande la plus complexe. Sa logique est la suivante :
-1.  **Analyse des Arguments** : Une boucle `while` analyse les arguments pour identifier la source du binaire (`--local`, `--ssh`) et les options de connexion (`--ssh-host`, etc.).
-2.  **Acquisition du Binaire** : Selon la source, il copie (`cp`) ou télécharge (`scp`) le binaire dans un fichier temporaire. La commande `scp` est construite dynamiquement pour inclure le port (`-P`) et le mot de passe (`sshpass`) si nécessaire.
-3.  **Appel du Script Python** : Il exécute `init_challenge.py`, en lui passant le chemin du projet et toutes les options parsées (chemin du binaire temporaire, informations SSH) comme arguments de script.
-4.  **Gestion de l'Environnement** : Après une création de projet réussie, il se déplace dans le nouveau dossier et exécute `exec "$SHELL"`. Cette commande remplace le processus shell actuel par un nouveau, ce qui permet à l'utilisateur de rester dans le nouveau répertoire avec l'environnement virtuel activé.
+1.  **Analyse des Arguments** : Une boucle `while` analyse les arguments pour identifier la source du binaire (`--local`, `--ssh`), les options de connexion (`--ssh-*`) et la libc à utiliser (`--libc`).
+2.  **Collecte SSH** : Lorsqu'une cible distante est fournie, le script déduit l'utilisateur, l'hôte et le chemin du binaire, puis demande un mot de passe interactif si nécessaire (lecture silencieuse via `read -s`). Aucun transfert de fichier n'est effectué à cette étape.
+3.  **Définition de la libc** : Si `--libc` pointe vers un fichier local, le chemin est mémorisé pour copie ultérieure. Sinon la valeur est prise telle quelle (version glibc, URL, etc.) et transmise au script Python.
+4.  **Appel du Script Python** : Il exécute `init_challenge.py`, en lui passant le chemin du projet et les options collectées. Les arguments `--ssh-*` sont sérialisés dans un objet `ssh` unique transmis à Python, et `--libc` est envoyé tel quel.
+5.  **Gestion de l'Environnement** : Après une création de projet réussie, il se déplace dans le nouveau dossier et exécute `exec "$SHELL"`. Cette commande remplace le processus shell actuel par un nouveau, ce qui permet à l'utilisateur de rester dans le nouveau répertoire avec l'environnement virtuel activé.
 
 ### Commande `go`
 Une commande simple qui se déplace dans un dossier de projet existant et exécute la même logique d'activation d'environnement que `init`.
@@ -46,17 +47,18 @@ Une commande simple qui se déplace dans un dossier de projet existant et exécu
 ### `init_challenge.py`
 Ce script est le générateur de projet.
 1.  Il reçoit les informations de `pwnenv` via `argparse`.
-2.  Il crée la structure de dossiers `bin`/`src`.
-3.  Il copie le binaire depuis le chemin temporaire vers le dossier `bin` final.
-4.  Il génère le fichier de configuration `pwnenv.conf.json`.
-5.  Il génère le script `exploit.py` à partir d'un template interne, en y injectant les informations pertinentes.
+2.  Il crée la structure de dossiers `bin`/`src` et prépare `lib/` si une libc locale est fournie.
+3.  Il copie le binaire depuis son emplacement d'origine vers le dossier `bin` final.
+4.  Il gère l'option `--libc` : copie le fichier dans `lib/` ou enregistre la version demandée.
+5.  Il génère le fichier de configuration `pwnenv.conf.json`.
+6.  Il génère le script `exploit.py` à partir d'un template interne, en y injectant les informations pertinentes.
 
 ### `pwnlib_api.py`
 C'est la librairie partagée par tous les projets. Elle est importée dynamiquement grâce au `PYTHONPATH` modifié par `pwnenv`.
 * **Classe `Pipeline`** : Le cœur de la librairie.
 * **`__init__`** : À l'initialisation, la classe cherche et charge le fichier `pwnenv.conf.json` du projet courant. Elle configure le contexte `pwntools` et définit le chemin du binaire local à partir de la configuration.
   * `context.terminal = ['tmux', 'splitw', '-v']` est défini afin d'ouvrir automatiquement un split vertical dans `tmux` pour GDB/Pwndbg. Cela fonctionne également si votre émulateur (ex: Terminator) est utilisé, tant que `tmux` est installé et accessible depuis le PATH.
-* **`connect`** : Cette méthode utilise la configuration chargée pour se connecter. Si `mode='REMOTE'`, elle utilise les informations `ssh_*` du fichier de configuration pour établir une connexion `pwnlib.ssh` et lancer le processus distant.
+* **`connect`** : Cette méthode utilise la configuration chargée pour se connecter. Si `mode='REMOTE'`, elle consomme l'objet `ssh` de `pwnenv.conf.json` pour établir une connexion `pwnlib.ssh` et lancer le processus distant.
 * **`@step` et `run`** : Implémentent un système de pipeline simple et déclaratif pour structurer le code de l'exploit.
 
 ---
@@ -73,9 +75,11 @@ Cela permet de dissocier la configuration (qui ne se fait qu'une fois) de l'exé
 ```json
 {
     "binary_path_local": "./bin/my_binary",
-    "binary_path_remote": "/path/on/server/my_binary",
-    "ssh_host": "pwn.challenge.com",
-    "ssh_port": 2222,
-    "ssh_user": "user",
-    "ssh_password": "password123"
+    "ssh": {
+    "host": "pwn.challenge.com",
+    "user": "user",
+    "pass": "password123",
+    "port": 2222,
+    "bin": "/path/on/server/my_binary"
+  }
 }

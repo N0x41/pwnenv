@@ -27,9 +27,11 @@ def main():
     parser.add_argument("--ssh-host", type=str)
     parser.add_argument("--ssh-port", type=int)
     parser.add_argument("--ssh-user", type=str)
-    parser.add_argument("--ssh-password", type=str)
-    parser.add_argument("--ssh-remote-path", type=str)
+    parser.add_argument("--ssh-pass", "--ssh-password", dest="ssh_pass", type=str)
+    parser.add_argument("--ssh-bin", dest="ssh_bin", type=str)
     parser.add_argument("--source-path", type=Path, default=None)
+    parser.add_argument("--ssh-src", dest="ssh_src", type=str)
+    parser.add_argument("--libc", type=str)
     args = parser.parse_args()
 
     project_dir, binary_path = args.project_path, args.binary_path
@@ -49,14 +51,40 @@ def main():
         shutil.copy(binary_path, dest_binary)
         dest_binary.chmod(dest_binary.stat().st_mode | stat.S_IEXEC)
 
+    ssh_config = {
+        'host': args.ssh_host,
+        'port': args.ssh_port,
+        'user': args.ssh_user,
+        'pass': args.ssh_pass,
+        'bin': args.ssh_bin,
+        'src': args.ssh_src,
+    }
+    ssh_config = {k: v for k, v in ssh_config.items() if v is not None}
+
+    libc_config = {}
+    libc_template_value = None
+    if args.libc:
+        libc_candidate = Path(args.libc).expanduser()
+        if libc_candidate.exists():
+            if libc_candidate.is_dir():
+                print("❌ Erreur : --libc doit pointer vers un fichier, pas un dossier.")
+                exit(1)
+            lib_dir = project_dir / 'lib'
+            lib_dir.mkdir(exist_ok=True)
+            dest_libc = lib_dir / libc_candidate.name
+            shutil.copy2(libc_candidate, dest_libc)
+            libc_config['local'] = f"./lib/{dest_libc.name}"
+            libc_template_value = str(dest_libc)
+        else:
+            libc_config['version'] = args.libc
+            libc_template_value = args.libc
+
     config = {
         'binary_path_local': f"./bin/{binary_name}" if binary_name else None,
-        'binary_path_remote': args.ssh_remote_path,
-        'ssh_host': args.ssh_host,
-        'ssh_port': args.ssh_port,
-        'ssh_user': args.ssh_user,
-        'ssh_password': args.ssh_password,
+        'ssh': ssh_config,
     }
+    if libc_config:
+        config['libc'] = libc_config
 
     with (project_dir / 'pwnenv.conf.json').open('w') as f:
         json.dump(config, f, indent=4)
@@ -69,7 +97,7 @@ def main():
             shutil.copytree(args.source_path, dest_folder, dirs_exist_ok=True)
         else:
             dest_source = src_dir / args.source_path.name
-            shutil.copy2(args.source_path, dest_source)
+        shutil.copy2(args.source_path, dest_source)
 
     # Génération du template via 'pwn template'
     exploit_script_path = project_dir / 'exploit.py'
@@ -87,10 +115,13 @@ def main():
             template_cmd += ["--port", str(args.ssh_port)]
         if args.ssh_user:
             template_cmd += ["--user", str(args.ssh_user)]
-        if args.ssh_password:
-            template_cmd += ["--pass", str(args.ssh_password)]
-        if args.ssh_remote_path:
-            template_cmd += ["--path", str(args.ssh_remote_path)]
+        if args.ssh_pass:
+            template_cmd += ["--pass", str(args.ssh_pass)]
+        if args.ssh_bin:
+            template_cmd += ["--path", str(args.ssh_bin)]
+
+    if libc_template_value:
+        template_cmd += ["--libc", str(libc_template_value)]
 
     try:
         tpl = subprocess.run(template_cmd, check=True, capture_output=True, text=True)

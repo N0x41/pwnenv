@@ -12,6 +12,12 @@ class Pipeline:
                 self.conf = json.load(f)
 
         self.binary_path = self.conf.get('binary_path_local')
+        ssh_section = self.conf.get('ssh', {})
+        self.ssh_conf = ssh_section if isinstance(ssh_section, dict) else {}
+        libc_section = self.conf.get('libc', {})
+        self.libc_conf = libc_section if isinstance(libc_section, dict) else {}
+        self.libc_path = self.libc_conf.get('local')
+        self.libc_version = self.libc_conf.get('version')
 
         context(os=os, arch=arch, endian=endian)
         context.log_level = log_level
@@ -36,12 +42,21 @@ class Pipeline:
             gdbscript += "continue"
             self.p = gdb.debug(self.binary_path, gdbscript=gdbscript)
         elif mode == 'REMOTE':
-            ssh_conf = {k: self.conf.get(f"ssh_{k}") for k in ['host', 'port', 'user', 'password']}
-            if not all(ssh_conf.values()):
-                log.error("Infos SSH manquantes dans pwnenv.conf.json")
+            required_keys = ['host', 'user', 'bin']
+            missing = [k for k in required_keys if not self.ssh_conf.get(k)]
+            if missing:
+                log.error(f"Infos SSH manquantes dans pwnenv.conf.json: {', '.join(missing)}")
                 exit(1)
-            ssh_conn = ssh(**ssh_conf)
-            self.p = ssh_conn.process(self.conf.get('binary_path_remote'))
+            ssh_kwargs = {
+                'host': self.ssh_conf.get('host'),
+                'user': self.ssh_conf.get('user'),
+            }
+            if self.ssh_conf.get('port'):
+                ssh_kwargs['port'] = self.ssh_conf['port']
+            if self.ssh_conf.get('pass'):
+                ssh_kwargs['password'] = self.ssh_conf['pass']
+            ssh_conn = ssh(**ssh_kwargs)
+            self.p = ssh_conn.process(self.ssh_conf.get('bin'))
         else:  # LOCAL
             if not self.binary_path:
                 log.error("Chemin du binaire requis pour LOCAL.")

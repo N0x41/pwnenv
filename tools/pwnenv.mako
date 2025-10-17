@@ -20,11 +20,15 @@ except Exception:
     conf = {}
 
 conf_binary = conf.get('binary_path_local')
-conf_host = conf.get('ssh_host')
-conf_port = conf.get('ssh_port')
-conf_user = conf.get('ssh_user')
-conf_password = conf.get('ssh_password')
-conf_remote_path = conf.get('binary_path_remote')
+conf_ssh = conf.get('ssh') if isinstance(conf.get('ssh'), dict) else {}
+conf_libc = conf.get('libc') if isinstance(conf.get('libc'), dict) else {}
+conf_host = conf_ssh.get('host')
+conf_port = conf_ssh.get('port')
+conf_user = conf_ssh.get('user')
+conf_password = conf_ssh.get('pass')
+conf_remote_path = conf_ssh.get('bin')
+conf_libc_local = conf_libc.get('local')
+conf_libc_version = conf_libc.get('version')
 
 binary = binary or conf_binary
 host = host or conf_host
@@ -32,6 +36,7 @@ port = port or conf_port
 user = user or conf_user
 password = password or conf_password
 remote_path = remote_path or conf_remote_path
+libc = libc or conf_libc_local or conf_libc_version
 
 try:
     if binary:

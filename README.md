@@ -11,12 +11,11 @@ PwnEnv est un outil en ligne de commande pour initialiser et gérer rapidement d
 ## Dépendances
 
 Assurez-vous que les outils suivants sont installés sur votre système :
-
-  * **Python 3.9+** et le module `venv`
   * **git** (utilisé par `pwntools` pour l'installation)
-  * **sshpass** (optionnel, pour utiliser l'option `--password` avec SSH)
   * **pwndbg** (recommandé, pour le débogage. Le chemin est configuré par défaut sur `/usr/share/pwndbg/gdbinit.py`)
-  * **tmux** (recommandé, pour le split automatique du terminal lors du DEBUG; fonctionne aussi si vous utilisez Terminator via l'appel tmux)
+  * **tmux** (utilisé pour les splits automatiques lors du DEBUG)
+  * **vim** (éditeur présent par défaut dans l'environnement généré)
+  * **Python 3.9+** avec le module `venv`
 
 -----
 
@@ -82,16 +81,23 @@ pwnenv init OverTheWire_Bandit0 --ssh bandit0@bandit.labs.overthewire.org:/bandi
 ```bash
 pwnenv init MyRemoteChallenge \
   --ssh user@host:/path/to/binary \
-  --ssh-host user@host \
-  --ssh-user user \
   --ssh-port 2222 \
-  --ssh-password "password123"
+  --ssh-pass "password123"
 ```
 
-  * `--ssh` sert à télécharger le binaire pour l'analyse locale.
-  * Les autres options `--ssh-*` sont sauvegardées dans `pwnenv.conf.json` pour permettre à votre script d'exploit de se connecter au serveur distant.
+  * `--ssh` enregistre le chemin distant du binaire (aucun téléchargement n'est effectué).
+  * Les autres options `--ssh-*` sont regroupées dans l'objet `ssh` du fichier `pwnenv.conf.json` et servent à l'exploit (`REMOTE`).
+  * Si aucun mot de passe n'est fourni, un prompt sécurisé est affiché pendant l'initialisation.
 
-**4. Projet vide (sans binaire) :**
+**4. Spécifier une libc :**
+
+```bash
+pwnenv init MyLibcChallenge --local ./bin/challenge --libc ~/libs/libc-2.35.so
+```
+
+  * `--libc` accepte un chemin local (copié dans `./lib/`) ou une version glibc à télécharger.
+
+**5. Projet vide (sans binaire) :**
 
 ```bash
 pwnenv init MyEmptyProject
