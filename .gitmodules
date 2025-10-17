@@ -1,0 +1,3 @@
+[submodule "tools/tmux-sidebar"]
+	path = tools/tmux-sidebar
+	url = https://github.com/tmux-plugins/tmux-sidebar.git

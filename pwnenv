@@ -87,10 +87,15 @@ case $COMMAND in
         
         # Analyse avancée des arguments
         declare -A a_args # Associative array
+        SSH_BIN_PATH_REMOTE=""; SSH_SRC_PATH_REMOTE=""
         while (( "$#" )); do
             case "$1" in
                 --local|--ssh|--ssh-host|--ssh-user|--ssh-port|--ssh-password)
                     a_args[$1]="$2"; shift 2;;
+                --ssh-bin)
+                    SSH_BIN_PATH_REMOTE="$2"; shift 2;;
+                --ssh-src)
+                    SSH_SRC_PATH_REMOTE="$2"; shift 2;;
                 *) echo -e "${RED}Option inconnue: $1${NC}"; show_help; exit 1;;
             esac
         done
@@ -98,10 +103,11 @@ case $COMMAND in
         echo -e "${CYAN}Initialisation du challenge '$PROJECT_NAME'...${NC}"
         
         CMD_ARGS=("$PROJECT_PATH")
-        TEMP_BINARY_PATH=$(mktemp)
+        TEMP_BINARY_PATH=""; TEMP_SOURCE_PATH=""
         
         if [[ -v a_args[--local] ]]; then
             echo "Source: Binaire local (${a_args[--local]})"
+            TEMP_BINARY_PATH=$(mktemp)
             cp "${a_args[--local]}" "$TEMP_BINARY_PATH"
             CMD_ARGS+=("--binary-path" "$TEMP_BINARY_PATH")
         elif [[ -v a_args[--ssh] ]]; then
@@ -112,11 +118,45 @@ case $COMMAND in
                 if ! command -v sshpass &> /dev/null; then echo -e "${RED}Erreur: 'sshpass' requis.${NC}"; exit 1; fi
                 SCP_CMD="sshpass -p '${a_args[--ssh-password]}' $SCP_CMD"
             fi
+            TEMP_BINARY_PATH=$(mktemp)
             eval "$SCP_CMD '${a_args[--ssh]}' '$TEMP_BINARY_PATH'"
             if [ $? -ne 0 ]; then echo -e "${RED}Échec du SCP.${NC}"; rm "$TEMP_BINARY_PATH"; exit 1; fi
             CMD_ARGS+=("--binary-path" "$TEMP_BINARY_PATH")
             # Le chemin distant du binaire est l'argument de --ssh
             a_args[--ssh-remote-path]="${a_args[--ssh]#*:}"
+        elif [[ -n "$SSH_BIN_PATH_REMOTE" ]]; then
+            echo "Source: SSH (hôte: ${a_args[--ssh-host]}, binaire: $SSH_BIN_PATH_REMOTE)"
+            if [[ -z "${a_args[--ssh-host]}" || -z "${a_args[--ssh-user]}" ]]; then
+                echo -e "${RED}Erreur: --ssh-host et --ssh-user requis avec --ssh-bin.${NC}"; exit 1; fi
+            REMOTE_SPEC="${a_args[--ssh-user]}@${a_args[--ssh-host]}:$SSH_BIN_PATH_REMOTE"
+            SCP_CMD="scp"
+            if [[ -v a_args[--ssh-port] ]]; then SCP_CMD+=" -P ${a_args[--ssh-port]}"; fi
+            if [[ -v a_args[--ssh-password] ]]; then
+                if ! command -v sshpass &> /dev/null; then echo -e "${RED}Erreur: 'sshpass' requis.${NC}"; exit 1; fi
+                SCP_CMD="sshpass -p '${a_args[--ssh-password]}' $SCP_CMD"
+            fi
+            TEMP_BINARY_PATH=$(mktemp)
+            eval "$SCP_CMD '$REMOTE_SPEC' '$TEMP_BINARY_PATH'"
+            if [ $? -ne 0 ]; then echo -e "${RED}Échec du SCP du binaire.${NC}"; rm -f "$TEMP_BINARY_PATH"; exit 1; fi
+            CMD_ARGS+=("--binary-path" "$TEMP_BINARY_PATH")
+            a_args[--ssh-remote-path]="$SSH_BIN_PATH_REMOTE"
+        fi
+
+        # Optionnel: récupération de la source distante
+        if [[ -n "$SSH_SRC_PATH_REMOTE" ]]; then
+            if [[ -z "${a_args[--ssh-host]}" || -z "${a_args[--ssh-user]}" ]]; then
+                echo -e "${RED}Erreur: --ssh-host et --ssh-user requis avec --ssh-src.${NC}"; exit 1; fi
+            REMOTE_SRC_SPEC="${a_args[--ssh-user]}@${a_args[--ssh-host]}:$SSH_SRC_PATH_REMOTE"
+            SCP_CMD="scp -r"
+            if [[ -v a_args[--ssh-port] ]]; then SCP_CMD+=" -P ${a_args[--ssh-port]}"; fi
+            if [[ -v a_args[--ssh-password] ]]; then
+                if ! command -v sshpass &> /dev/null; then echo -e "${RED}Erreur: 'sshpass' requis.${NC}"; exit 1; fi
+                SCP_CMD="sshpass -p '${a_args[--ssh-password]}' $SCP_CMD"
+            fi
+            TEMP_SOURCE_PATH=$(mktemp -d)
+            eval "$SCP_CMD '$REMOTE_SRC_SPEC' '$TEMP_SOURCE_PATH'"
+            if [ $? -ne 0 ]; then echo -e "${RED}Échec du SCP de la source.${NC}"; rm -rf "$TEMP_SOURCE_PATH"; exit 1; fi
+            CMD_ARGS+=("--source-path" "$TEMP_SOURCE_PATH")
         fi
 
         # Passer les arguments SSH au script python
@@ -125,12 +165,15 @@ case $COMMAND in
         done
 
         python3 "$INIT_SCRIPT_PATH" "${CMD_ARGS[@]}"
-        rm -f "$TEMP_BINARY_PATH"
+        if [ -n "$TEMP_BINARY_PATH" ]; then rm -f "$TEMP_BINARY_PATH"; fi
+        if [ -n "$TEMP_SOURCE_PATH" ]; then rm -rf "$TEMP_SOURCE_PATH"; fi
         
         if [ $? -ne 0 ]; then echo -e "${RED}L'initialisation a échoué.${NC}"; exit 1; fi
 
         echo -e "\n${GREEN}Projet initialisé. Activation de l'environnement...${NC}"
         cd "$PROJECT_PATH"
+        # Activer le venv global pour disposer des librairies immédiatement
+        source "$VENV_DIR/bin/activate"
         exec "$SHELL"
         ;;
     go)
