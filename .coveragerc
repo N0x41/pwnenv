@@ -1,2 +1,17 @@
 [run]
+branch = True
+source =
+	.
+omit =
+	*/.venv/*
+	*/venv/*
+	*/.tox/*
+	tests/*
 disable_warnings = no-data-collected
+
+[report]
+show_missing = True
+skip_covered = True
+exclude_lines =
+	pragma: no cover
+	if __name__ == .__main__.: 
