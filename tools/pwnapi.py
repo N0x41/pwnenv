@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Callable, List, Optional
+from typing import Callable, Optional
 
 from pwn import ELF, context, gdb, log, process, ssh
 from pwnlib.args import args
@@ -73,7 +73,8 @@ class Pipeline:
             except Exception as exc:  # pragma: no cover - logging only
                 log.warning(f"Impossible de charger la libc '{self.libc_path}': {exc}")
 
-        self.steps: List[StepFn] = []
+        # Steps/pipeline state
+        self.steps: list[StepFn] = []
         self._process: Optional[tube] = None
         self._ssh_session = None
 

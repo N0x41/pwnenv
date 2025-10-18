@@ -1,0 +1,31 @@
+[tool.ruff]
+line-length = 100
+target-version = "py39"
+exclude = [
+  ".venv",
+  "venv",
+  ".tox",
+  ".git",
+  "build",
+  "dist",
+]
+
+[tool.ruff.lint]
+select = [
+  "E",   # pycodestyle errors
+  "F",   # pyflakes
+  "I",   # isort
+  "UP",  # pyupgrade
+]
+ignore = [
+  "E402",  # module level import not at top (our CLI may manipulate sys.path)
+  "E501",  # temporarily ignore line length; tighten later
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["I001"]
+"tools/pwnapi.py" = ["UP006", "UP007", "I001"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["tools"]
+combine-as-imports = true
