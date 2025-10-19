@@ -48,7 +48,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          VERSION=$(python -c "import re,sys; s=open('pwnenv/pwnenv','r',encoding='utf-8').read(); m=re.search(r\"PWNENV_VERSION\\s*=\\s*['\\\"](\\d+\\.\\d+\\.\\d+)['\\\"]\", s); print(m.group(1)) if m else sys.exit(1)")
+          VERSION=$(python -c "import re,sys; s=open('pwnenv','r',encoding='utf-8').read(); m=re.search(r\"PWNENV_VERSION\\s*=\\s*['\\\"](\\d+\\.\\d+\\.\\d+)['\\\"]\", s); print(m.group(1)) if m else sys.exit(1)")
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "tag=v$VERSION" >> "$GITHUB_OUTPUT"
         if: steps.msg.outputs.is_release == 'true'
@@ -113,7 +113,7 @@ jobs:
           # Determine base version tag (latest pure vX.Y.Z); fallback to source if none
           BASE=$(git tag --list 'v*' | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -n1 || true)
           if [ -z "${BASE}" ]; then
-            VERSION=$(python -c "import re,sys; s=open('pwnenv/pwnenv','r',encoding='utf-8').read(); m=re.search(r\"PWNENV_VERSION\\s*=\\s*['\\\"](\\d+\\.\\d+\\.\\d+)['\\\"]\", s); print(m.group(1)) if m else sys.exit(1)")
+            VERSION=$(python -c "import re,sys; s=open('pwnenv','r',encoding='utf-8').read(); m=re.search(r\"PWNENV_VERSION\\s*=\\s*['\\\"](\\d+\\.\\d+\\.\\d+)['\\\"]\", s); print(m.group(1)) if m else sys.exit(1)")
             BASE="v${VERSION}"
           fi
           # Compute next build number for this base (avoid regex pitfalls)

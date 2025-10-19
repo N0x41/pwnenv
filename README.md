@@ -1,6 +1,6 @@
 # PwnEnv - Gestionnaire d'Environnement de Pwn
 
-[![Version](https://img.shields.io/badge/version-3.2.0-blue.svg)](https://github.com/N0x41/pwnenv)
+[![Version](https://img.shields.io/badge/version-3.2.1-blue.svg)](https://github.com/N0x41/pwnenv)
 [![Python](https://img.shields.io/badge/python-3.9+-green.svg)](https://python.org)
 [![codecov](https://codecov.io/gh/N0x41/pwnenv/branch/main/graph/badge.svg?token=OKZ0154KE0)](https://codecov.io/gh/N0x41/pwnenv)
 
