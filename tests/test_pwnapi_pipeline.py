@@ -84,3 +84,29 @@ def test_connect_remote_via_ssh(monkeypatch):
     assert called["ssh"]["host"] == "h"
     assert called["ssh"]["user"] == "u"
     assert called["cmd"] == ["/bin/x"]
+
+
+def test_pipeline_init_default_port(tmp_path, monkeypatch):
+    mod = load_pipeline()
+    # Create a minimal config file in cwd
+    cfg = {
+        "binary_path_local": None,
+        "ssh": {"host": "h", "user": "u", "bin": "/x"},
+    }
+    cwd = tmp_path
+    (cwd / "pwnenv.conf.json").write_text(__import__("json").dumps(cfg))
+
+    # Run inside that directory
+    monkeypatch.chdir(cwd)
+    pl = mod.Pipeline()
+    assert pl.remote_port == 22
+
+
+def test_default_mode_local_when_no_config(monkeypatch):
+    mod = load_pipeline()
+    pl = mod.Pipeline()
+    # Ensure no local or remote configured
+    pl.has_local = False
+    pl.has_remote = False
+    pl.remote_host = None
+    assert pl.default_mode == "LOCAL"

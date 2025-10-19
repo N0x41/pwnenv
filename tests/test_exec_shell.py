@@ -131,6 +131,46 @@ def test_exec_shell_tmux_existing_session_sources_config(monkeypatch, tmp_path):
     assert any(cmd[:2] == ["/usr/bin/tmux", "source-file"] for cmd in calls)
 
 
+def test_exec_shell_tmux_new_session_no_source(monkeypatch, tmp_path):
+    mod = load_cli_module()
+    cfg = {"challenges_dir": str(tmp_path / "challs")}
+    paths = mod.Paths(cfg)
+    project = paths.challenges_dir / "Pn"
+    project.mkdir(parents=True)
+
+    tmux_cfg = tmp_path / "conf.tmux"
+    tmux_cfg.write_text("set -g mouse on\n")
+    monkeypatch.setenv("PWNENV_TMUX_CONFIG", str(tmux_cfg))
+
+    monkeypatch.setattr(mod.shutil, "which", lambda *_: "/usr/bin/tmux")
+
+    calls = []
+    def fake_run(argv, **kw):
+        calls.append(list(argv))
+        class R:
+            def __init__(self, rc):
+                self.returncode = rc
+        # Simulate has-session not existing (non-zero), so no source-file run
+        if calls and calls[0][1:3] == ["has-session", "-t"]:
+            return R(1)
+        return R(0)
+
+    def fake_execve(file, args, env):
+        raise SystemExit(0)
+
+    monkeypatch.setattr(mod.subprocess, "run", fake_run)
+    monkeypatch.setenv("SHELL", "/bin/sh")
+    monkeypatch.setattr(mod.os, "execve", fake_execve)
+    try:
+        mod.exec_shell(project, paths, "Name")
+    except SystemExit:
+        pass
+
+    # Ensure has-session was checked and source-file was not called
+    assert any(cmd[:2] == ["/usr/bin/tmux", "has-session"] for cmd in calls)
+    assert not any(cmd[:2] == ["/usr/bin/tmux", "source-file"] for cmd in calls)
+
+
 def test_exec_shell_without_tmux_falls_back_to_shell(monkeypatch, tmp_path):
     mod = load_cli_module()
     cfg = {"challenges_dir": str(tmp_path / "challs")}

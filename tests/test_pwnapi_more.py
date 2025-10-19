@@ -300,3 +300,89 @@ def test_remote_gdb_over_ssh(monkeypatch):
     assert captured["gdb_script"] == "si"
     # The ssh session object passed to gdb.debug should be the DummySSH instance
     assert captured["gdb_ssh"] is not None
+
+
+def test_remote_gdb_default_script_when_none(monkeypatch):
+    mod = load_pipeline()
+    pl = mod.Pipeline()
+    pl.remote_host = "h"
+    pl.remote_user = "u"
+    pl.remote_path = "/bin/x"
+    pl.has_remote = True
+
+    class DummySSH:
+        def __call__(self, **kw):
+            return self
+        def process(self, cmd):
+            raise AssertionError("should not process in GDB mode")
+
+    class DummyTube:
+        def connected(self):
+            return False
+
+    captured = {"script": None}
+
+    def fake_gdb_debug(command, gdbscript=None, ssh=None):
+        captured["script"] = gdbscript
+        return DummyTube()
+
+    monkeypatch.setattr(mod.args, "GDB", True, raising=False)
+    monkeypatch.setattr(mod, "ssh", DummySSH())
+    monkeypatch.setattr(mod.gdb, "debug", fake_gdb_debug)
+    pl.connect("REMOTE")
+    assert captured["script"] == "continue"
+
+
+def test_print_summary_logs(monkeypatch):
+    mod = load_pipeline()
+    pl = mod.Pipeline()
+    # Configure a mix to populate all fields
+    pl.binary_path = "./bin/app"
+    pl.remote_host = "h"
+    pl.remote_user = "u"
+    pl.remote_path = "/bin/x"
+    pl.remote_port = 2022
+    pl.libc_path = "/lib/x.so"
+
+    logs: list[str] = []
+    monkeypatch.setattr(mod.log, "info", lambda msg: logs.append(str(msg)))
+    pl.print_summary()
+    # Expect at least entries for LOCAL, REMOTE, PORT, LIBC, MODE
+    assert any(line.startswith("LOCAL") for line in logs)
+    assert any(line.startswith("REMOTE") for line in logs)
+    assert any(line.startswith("PORT") for line in logs)
+    assert any(line.startswith("LIBC") for line in logs)
+    assert any(line.startswith("MODE") for line in logs)
+
+
+def test_run_calls_interactive_and_close(monkeypatch):
+    mod = load_pipeline()
+    pl = mod.Pipeline()
+    calls = {"interactive": 0, "close": 0, "ssh_close": 0}
+
+    class DummyTube:
+        def connected(self):
+            return True
+        def interactive(self):
+            calls["interactive"] += 1
+        def close(self):
+            calls["close"] += 1
+
+    def fake_connect(mode, breakpoint=None, gdbscript=None):
+        return DummyTube()
+
+    class DummySSH:
+        def close(self):
+            calls["ssh_close"] += 1
+
+    monkeypatch.setattr(pl, "connect", fake_connect)
+    pl._ssh_session = DummySSH()
+
+    @pl.step
+    def noop(_pl, _io):
+        pass
+
+    pl.run(mode="LOCAL")
+    assert calls["interactive"] == 1
+    assert calls["close"] == 1
+    assert calls["ssh_close"] == 1

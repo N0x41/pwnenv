@@ -275,6 +275,16 @@ def test_handle_init_errors(monkeypatch, tmp_path):
     except SystemExit:
         pass
 
+    # Project already exists should exit with error
+    existing = types.SimpleNamespace(**{**ns.__dict__, "project_name": "Exists"})
+    existing_path = paths.challenges_dir / "Exists"
+    existing_path.mkdir(parents=True)
+    try:
+        mod.handle_init(existing, paths)
+        assert False, "Expected SystemExit for existing project"
+    except SystemExit:
+        pass
+
     # Invalid local path
     ns2 = types.SimpleNamespace(**{**ns.__dict__, "project_name": "PBad", "local": str(tmp_path / "nope.bin")})
     try:

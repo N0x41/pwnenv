@@ -14,7 +14,7 @@ disable_warnings = no-data-collected
 [report]
 show_missing = True
 skip_covered = True
-skip_empty = true
+skip_empty = True
 exclude_lines =
 	pragma: no cover
 	if __name__ == .__main__.: 

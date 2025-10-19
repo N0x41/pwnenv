@@ -38,3 +38,55 @@ def test_show_help_prints_usage(monkeypatch, capsys, tmp_path):
     # Check presence of our commands via help text
     text = parser.format_help()
     assert "init" in text and "go" in text
+
+
+def test_main_no_command_shows_help(monkeypatch, capsys, tmp_path):
+    mod = load_cli_module()
+    # Avoid side effects
+    monkeypatch.setattr(mod, "self_setup", lambda *_a, **_k: None)
+    monkeypatch.setattr(mod, "exec_shell", lambda *a, **k: None)
+    monkeypatch.setattr(mod, "load_config", lambda: {"challenges_dir": str(tmp_path / "challs")})
+
+    import sys
+    old = sys.argv[:]
+    sys.argv = ["pwnenv"]
+    try:
+        mod.main()
+    finally:
+        sys.argv = old
+    out = capsys.readouterr().out
+    assert "Usage:" in out or "usage:" in out
+
+
+def test_main_unknown_contains_help_flag(monkeypatch, capsys, tmp_path):
+    mod = load_cli_module()
+    monkeypatch.setattr(mod, "self_setup", lambda *_a, **_k: None)
+    monkeypatch.setattr(mod, "exec_shell", lambda *a, **k: None)
+    monkeypatch.setattr(mod, "load_config", lambda: {"challenges_dir": str(tmp_path / "challs")})
+
+    import sys
+    old = sys.argv[:]
+    sys.argv = ["pwnenv", "init", "--help"]
+    try:
+        mod.main()
+    finally:
+        sys.argv = old
+    out = capsys.readouterr().out
+    assert "Usage:" in out or "usage:" in out
+
+
+def test_main_global_help_flag(monkeypatch, capsys, tmp_path):
+    mod = load_cli_module()
+    monkeypatch.setattr(mod, "self_setup", lambda *_a, **_k: None)
+    monkeypatch.setattr(mod, "exec_shell", lambda *a, **k: None)
+    monkeypatch.setattr(mod, "load_config", lambda: {"challenges_dir": str(tmp_path / "challs")})
+
+    import sys
+    old = sys.argv[:]
+    sys.argv = ["pwnenv", "-h"]
+    try:
+        mod.main()
+    finally:
+        sys.argv = old
+    out = capsys.readouterr().out
+    assert "Usage:" in out or "usage:" in out
