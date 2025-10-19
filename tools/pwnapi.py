@@ -36,17 +36,17 @@ class Pipeline:
             except Exception as exc:  # pragma: no cover - logging only
                 log.warning(f"Impossible de charger {self.conf_path}: {exc}")
 
-        self.binary_path: Optional[str] = self.conf.get("binary_path_local")
+        self.binary_path: str = self.conf.get("binary_path_local")
         ssh_section = self.conf.get("ssh") if isinstance(self.conf.get("ssh"), dict) else {}
         self.ssh_conf = ssh_section if ssh_section else {}
         libc_section = self.conf.get("libc") if isinstance(self.conf.get("libc"), dict) else {}
         self.libc_conf = libc_section if libc_section else {}
 
-        self.remote_host: Optional[str] = self.ssh_conf.get("host")
-        self.remote_port: Optional[int] = self.ssh_conf.get("port")
-        self.remote_user: Optional[str] = self.ssh_conf.get("user")
-        self.remote_pass: Optional[str] = self.ssh_conf.get("pass")
-        self.remote_path: Optional[str] = self.ssh_conf.get("bin")
+        self.remote_host: str = self.ssh_conf.get("host")
+        self.remote_port: int = self.ssh_conf.get("port")
+        self.remote_user: str = self.ssh_conf.get("user")
+        self.remote_pass: str = self.ssh_conf.get("pass")
+        self.remote_path: str = self.ssh_conf.get("bin")
         if self.remote_host and self.remote_user and self.remote_path and not self.remote_port:
             self.remote_port = 22
 
@@ -57,16 +57,17 @@ class Pipeline:
         context.log_level = log_level
         context.terminal = ["tmux", "splitw", "-v"]
 
-        self.elf= ELF | None
+        # Loaded ELF binaries (optional)
+        self.elf: ELF = None
         if self.binary_path:
             try:
                 self.elf = context.binary = ELF(self.binary_path, checksec=False)
             except Exception as exc:  # pragma: no cover - logging only
                 log.warning(f"Impossible de charger le binaire local '{self.binary_path}': {exc}")
 
-        self.libc_path: Optional[str] = self.libc_conf.get("local")
-        self.libc_version: Optional[str] = self.libc_conf.get("version")
-        self.libc= ELF | None
+        self.libc_path: str = self.libc_conf.get("local")
+        self.libc_version: str = self.libc_conf.get("version")
+        self.libc: ELF = None
         if self.libc_path:
             try:
                 self.libc = ELF(self.libc_path, checksec=False)
@@ -75,7 +76,7 @@ class Pipeline:
 
         # Steps/pipeline state
         self.steps: list[StepFn] = []
-        self._process= tube | None
+        self._process: tube = None
         self._ssh_session = None
 
     @property
@@ -105,9 +106,12 @@ class Pipeline:
         self.steps.append(func)
         return func
 
-    def connect(self, mode: str = "LOCAL", breakpoint=None, gdbscript= str | None) -> tube:
+    def connect(self, mode: str = "LOCAL", breakpoint=None, gdbscript: str = None) -> tube:
         selected = (mode or self.default_mode).upper()
-        if getattr(args, "GDB", False) and selected != "DEBUG":
+        # If GDB flag is set, prefer DEBUG unless REMOTE has been explicitly selected.
+        # This keeps the REMOTE+GDB path reachable (gdb over SSH) while still
+        # forcing LOCAL to DEBUG when requested.
+        if getattr(args, "GDB", False) and selected not in ("DEBUG", "REMOTE"):
             selected = "DEBUG"
         if selected == "DEBUG":
             if not self.binary_path:
@@ -164,7 +168,7 @@ class Pipeline:
         for label, value in summary:
             log.info(f"{label:<6}: {value}")
 
-    def run(self, mode= str | None, breakpoint=None, gdbscript= str | None) -> None:
+    def run(self, mode: str = None, breakpoint=None, gdbscript: str = None) -> None:
         """Exécute les étapes enregistrées puis passe en interaction."""
 
         selected = (mode or self.default_mode).upper()
