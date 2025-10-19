@@ -79,3 +79,82 @@ def test_handle_init_uses_template_output(monkeypatch, tmp_path):
     mod.handle_init(ns, paths)
     out = (paths.challenges_dir / "ProjTpl" / "exploit.py").read_text()
     assert "hello from template" in out
+
+
+def test_handle_init_invalid_ssh_errors(monkeypatch, tmp_path):
+    mod = load_cli_module()
+    cfg = {"challenges_dir": str(tmp_path / "challs")}
+    paths = mod.Paths(cfg)
+    monkeypatch.setattr(mod, "self_setup", lambda *_a, **_k: None)
+    monkeypatch.setattr(mod, "exec_shell", lambda *_a, **_k: None)
+
+    ns = types.SimpleNamespace(
+        project_name="BadSSH",
+        source_path=None,
+        local=None,
+        ssh="user_at_host_without_colon",
+        ssh_host=None,
+        ssh_user=None,
+        ssh_port=None,
+        ssh_pass=None,
+        ssh_bin=None,
+        ssh_src=None,
+        libc=None,
+        source_path_option=None,
+    )
+
+    import sys
+    try:
+        mod.handle_init(ns, paths)
+        assert False, "Expected SystemExit for invalid ssh spec"
+    except SystemExit:
+        pass
+
+
+def test_handle_init_template_cmd_includes_template_and_binary(monkeypatch, tmp_path):
+    mod = load_cli_module()
+    # Prepare local binary
+    local_bin = tmp_path / "bin_local"
+    local_bin.write_text("x")
+
+    cfg = {"challenges_dir": str(tmp_path / "challs")}
+    paths = mod.Paths(cfg)
+    paths.script_dir = tmp_path
+    (paths.script_dir / "tools").mkdir(exist_ok=True)
+    template_file = paths.script_dir / "tools" / "pwnenv.mako"
+    template_file.write_text("## tpl\n")
+
+    captured = {}
+
+    class Dummy:
+        def __init__(self, stdout):
+            self.stdout = stdout
+
+    def fake_run(cmd, **kw):
+        captured["cmd"] = cmd
+        return Dummy("print('ok')\n")
+
+    monkeypatch.setattr(mod.subprocess, "run", fake_run)
+    monkeypatch.setattr(mod, "self_setup", lambda *_a, **_k: None)
+    monkeypatch.setattr(mod, "exec_shell", lambda *_a, **_k: None)
+
+    ns = types.SimpleNamespace(
+        project_name="ProjLocalTpl",
+        source_path=None,
+        local=str(local_bin),
+        ssh=None,
+        ssh_host=None,
+        ssh_user=None,
+        ssh_port=None,
+        ssh_pass=None,
+        ssh_bin=None,
+        ssh_src=None,
+        libc=None,
+        source_path_option=None,
+    )
+
+    mod.handle_init(ns, paths)
+    cmd = captured.get("cmd")
+    assert cmd is not None and cmd[:2] == ["pwn", "template"]
+    assert "--template" in cmd and str(template_file) in cmd
+    assert f"./bin/{local_bin.name}" in cmd

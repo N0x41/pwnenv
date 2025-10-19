@@ -7,7 +7,6 @@
 
 PwnEnv est un outil en ligne de commande pour initialiser et gérer rapidement des environnements de travail pour des challenges d'exploitation binaire (pwn). Il automatise la création des dossiers, la configuration d'un environnement Python global avec `pwntools`, et la génération de scripts d'exploitation templates.
 
-Note: la couverture locale actuelle est d'environ 80% (voir `coverage.xml`). La pastille ci-dessus reflète la couverture mesurée par Codecov sur la branche `main`.
 
 -----
 

@@ -1,0 +1,124 @@
+name: Release (tag + notes)
+
+on:
+  workflow_run:
+    workflows: ["CI"]
+    types: ["completed"]
+
+jobs:
+  tag-and-release:
+    if: >-
+      ${{ github.event.workflow_run.conclusion == 'success' &&
+          github.event.workflow_run.head_branch == 'main' &&
+          github.event.workflow_run.event == 'push' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout repository at tested commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.9'
+
+      - name: Get commit message
+        id: msg
+        shell: bash
+        run: |
+          set -euo pipefail
+          MSG=$(git show -s --format=%B "${{ github.event.workflow_run.head_sha }}")
+          echo "message<<EOF" >> "$GITHUB_OUTPUT"
+          echo "$MSG" >> "$GITHUB_OUTPUT"
+          echo "EOF" >> "$GITHUB_OUTPUT"
+          if echo "$MSG" | grep -iqE '^release:'; then
+            echo "is_release=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "is_release=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Determine version from source
+        id: ver
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION=$(python -c "import re,sys; s=open('pwnenv/pwnenv','r',encoding='utf-8').read(); m=re.search(r\"PWNENV_VERSION\\s*=\\s*['\\\"](\\d+\\.\\d+\\.\\d+)['\\\"]\", s); print(m.group(1)) if m else sys.exit(1)")
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=v$VERSION" >> "$GITHUB_OUTPUT"
+        if: steps.msg.outputs.is_release == 'true'
+
+      - name: Fetch tags
+        run: git fetch --tags --force --prune
+
+      - name: Check if tag exists
+        id: check
+        shell: bash
+        run: |
+          if git rev-parse "${{ steps.ver.outputs.tag }}" >/dev/null 2>&1; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+        if: steps.msg.outputs.is_release == 'true'
+
+      - name: Create and push release tag
+        if: steps.msg.outputs.is_release == 'true' && steps.check.outputs.exists == 'false'
+        env:
+          TAG: ${{ steps.ver.outputs.tag }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "$TAG" -m "Release $TAG"
+          git push origin "$TAG"
+
+      - name: Create or update GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.ver.outputs.tag }}
+          name: ${{ steps.ver.outputs.tag }}
+          generate_release_notes: true
+        if: steps.msg.outputs.is_release == 'true'
+
+      - name: Verify README version badge matches source
+        if: steps.msg.outputs.is_release == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          BADGE=$(grep -oE 'version-[0-9]+\.[0-9]+\.[0-9]+-blue\.svg' README.md | head -n1 || true)
+          if [ -z "${BADGE}" ]; then
+            echo "Version badge not found in README.md" >&2
+            exit 1
+          fi
+          BADGE_VER=${BADGE#version-}
+          BADGE_VER=${BADGE_VER%-blue.svg}
+          SRC_VER='${{ steps.ver.outputs.version }}'
+          if [ "${BADGE_VER}" != "${SRC_VER}" ]; then
+            echo "README version badge (${BADGE_VER}) does not match source version (${SRC_VER})." >&2
+            exit 1
+          fi
+
+      - name: Compute next build tag
+        id: build
+        if: steps.msg.outputs.is_release == 'false'
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --tags --force --prune
+          LAST=$(git tag --list 'build-*' | sed -n 's/^build-\([0-9]\+\)$/\1/p' | sort -n | tail -n1)
+          if [ -z "${LAST:-}" ]; then NEXT=1; else NEXT=$((LAST + 1)); fi
+          echo "next=$NEXT" >> "$GITHUB_OUTPUT"
+          echo "tag=build-$NEXT" >> "$GITHUB_OUTPUT"
+
+      - name: Create and push build tag
+        if: steps.msg.outputs.is_release == 'false'
+        env:
+          TAG: ${{ steps.build.outputs.tag }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "$TAG" -m "Automated build $TAG (CI green)"
+          git push origin "$TAG"
