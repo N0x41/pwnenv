@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Callable, Optional
+from typing import Callable
 
 from pwn import ELF, context, gdb, log, process, ssh
 from pwnlib.args import args
