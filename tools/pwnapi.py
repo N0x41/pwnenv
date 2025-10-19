@@ -57,7 +57,7 @@ class Pipeline:
         context.log_level = log_level
         context.terminal = ["tmux", "splitw", "-v"]
 
-        self.elf: Optional[ELF] = None
+        self.elf= ELF | None
         if self.binary_path:
             try:
                 self.elf = context.binary = ELF(self.binary_path, checksec=False)
@@ -66,7 +66,7 @@ class Pipeline:
 
         self.libc_path: Optional[str] = self.libc_conf.get("local")
         self.libc_version: Optional[str] = self.libc_conf.get("version")
-        self.libc: Optional[ELF] = None
+        self.libc= ELF | None
         if self.libc_path:
             try:
                 self.libc = ELF(self.libc_path, checksec=False)
@@ -75,7 +75,7 @@ class Pipeline:
 
         # Steps/pipeline state
         self.steps: list[StepFn] = []
-        self._process: Optional[tube] = None
+        self._process= tube | None
         self._ssh_session = None
 
     @property
@@ -105,7 +105,7 @@ class Pipeline:
         self.steps.append(func)
         return func
 
-    def connect(self, mode: str = "LOCAL", breakpoint=None, gdbscript: Optional[str] = None) -> tube:
+    def connect(self, mode: str = "LOCAL", breakpoint=None, gdbscript= str | None) -> tube:
         selected = (mode or self.default_mode).upper()
         if getattr(args, "GDB", False) and selected != "DEBUG":
             selected = "DEBUG"
@@ -164,7 +164,7 @@ class Pipeline:
         for label, value in summary:
             log.info(f"{label:<6}: {value}")
 
-    def run(self, mode: Optional[str] = None, breakpoint=None, gdbscript: Optional[str] = None) -> None:
+    def run(self, mode= str | None, breakpoint=None, gdbscript= str | None) -> None:
         """Exécute les étapes enregistrées puis passe en interaction."""
 
         selected = (mode or self.default_mode).upper()

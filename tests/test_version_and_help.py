@@ -6,6 +6,7 @@ def load_cli_module() -> types.ModuleType:
     cli_path = Path(__file__).resolve().parents[1] / "pwnenv"
     code = cli_path.read_text()
     module = types.ModuleType("pwnenv_cli")
+    module.__file__ = str(cli_path)
     compiled = compile(code, str(cli_path), "exec")
     exec(compiled, module.__dict__)
     return module
