@@ -2,9 +2,12 @@
 
 [![Version](https://img.shields.io/badge/version-3.2.0-blue.svg)](https://github.com/N0x41/pwnenv)
 [![Python](https://img.shields.io/badge/python-3.9+-green.svg)](https://python.org)
+[![Coverage](https://codecov.io/gh/N0x41/pwnenv/branch/main/graph/badge.svg)](https://codecov.io/gh/N0x41/pwnenv)
 [Installation](https://www.google.com/search?q=%23installation) • [Utilisation](https://www.google.com/search?q=%23utilisation) • [**Documentation Technique (DOC.md)**](https://www.google.com/search?q=DOC.md)
 
 PwnEnv est un outil en ligne de commande pour initialiser et gérer rapidement des environnements de travail pour des challenges d'exploitation binaire (pwn). Il automatise la création des dossiers, la configuration d'un environnement Python global avec `pwntools`, et la génération de scripts d'exploitation templates.
+
+Note: la couverture locale actuelle est d'environ 80% (voir `coverage.xml`). La pastille ci-dessus reflète la couverture mesurée par Codecov sur la branche `main`.
 
 -----
 
