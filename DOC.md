@@ -2,26 +2,6 @@
 ## `DOC.md`
 
 ---
-## 5. Notes sur les tests (réalité contrôlée)
-
-Ces tests complètent la couverture de `pwnapi.py` en exécutant des chemins proches de la réalité, mais de manière sûre et hermétique.
-
-- Binaire factice local ("dummy")
-  - Certains tests compilent au vol un petit programme C minimal avec `gcc` dans un dossier temporaire (`tmp_path`).
-  - Ce binaire est utilisé pour valider les modes `LOCAL` (via `process(...)`) et `DEBUG` (via `gdb.debug(...)` stubé) sans dépendances externes.
-  - Si `gcc` n'est pas disponible dans l'environnement CI/local, les tests concernés sont marqués `skip` automatiquement.
-
-- GDB/Pwndbg par défaut
-  - En mode `DEBUG` sans `gdbscript` fourni, `pwnapi` insère par défaut `source /usr/share/pwndbg/gdbinit.py` suivi d'un `continue`.
-  - Lorsqu'un `breakpoint` est passé à `connect(...)`, il est converti en `break *0x...` pour un entier, ou `break <symbole>` pour une chaîne, puis ajouté au script.
-
-- SSH localhost (optionnel)
-  - Un test tente d'exécuter le binaire via SSH sur `localhost` pour couvrir le chemin `REMOTE` réel.
-  - Ce test est conditionné par une connexion SSH sans mot de passe (BatchMode) disponible ; sinon, il est marqué `skip`.
-  - Aucun état persistant n'est modifié et les sessions sont fermées proprement en `finally`.
-
-Ce fichier contient la documentation technique qui détaille le fonctionnement interne de l'outil.
-
 # Documentation Technique de PwnEnv
 
 Ce document détaille l'architecture et le fonctionnement interne de l'outil `pwnenv`.
@@ -94,3 +74,25 @@ Cela permet de dissocier la configuration (qui ne se fait qu'une fois) de l'exé
     "bin": "/path/on/server/my_binary"
   }
 }
+```
+---
+
+## 5. Notes sur les tests (réalité contrôlée)
+
+Ces tests complètent la couverture de `pwnapi.py` en exécutant des chemins proches de la réalité, mais de manière sûre et hermétique.
+
+- Binaire factice local ("dummy")
+  - Certains tests compilent au vol un petit programme C minimal avec `gcc` dans un dossier temporaire (`tmp_path`).
+  - Ce binaire est utilisé pour valider les modes `LOCAL` (via `process(...)`) et `DEBUG` (via `gdb.debug(...)` stubé) sans dépendances externes.
+  - Si `gcc` n'est pas disponible dans l'environnement CI/local, les tests concernés sont marqués `skip` automatiquement.
+
+- GDB/Pwndbg par défaut
+  - En mode `DEBUG` sans `gdbscript` fourni, `pwnapi` insère par défaut `source /usr/share/pwndbg/gdbinit.py` suivi d'un `continue`.
+  - Lorsqu'un `breakpoint` est passé à `connect(...)`, il est converti en `break *0x...` pour un entier, ou `break <symbole>` pour une chaîne, puis ajouté au script.
+
+- SSH localhost (optionnel)
+  - Un test tente d'exécuter le binaire via SSH sur `localhost` pour couvrir le chemin `REMOTE` réel.
+  - Ce test est conditionné par une connexion SSH sans mot de passe (BatchMode) disponible ; sinon, il est marqué `skip`.
+  - Aucun état persistant n'est modifié et les sessions sont fermées proprement en `finally`.
+
+Ce fichier contient la documentation technique qui détaille le fonctionnement interne de l'outil.
