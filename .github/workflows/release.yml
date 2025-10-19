@@ -30,11 +30,13 @@ jobs:
         id: msg
         shell: bash
         run: |
-          set -euo pipefail
+          set -eo pipefail
           MSG=$(git show -s --format=%B "${{ github.event.workflow_run.head_sha }}")
-          echo "message<<EOF" >> "$GITHUB_OUTPUT"
-          echo "$MSG" >> "$GITHUB_OUTPUT"
-          echo "EOF" >> "$GITHUB_OUTPUT"
+          {
+            printf 'message<<EOF\n'
+            printf '%s\n' "$MSG"
+            printf 'EOF\n'
+          } >> "$GITHUB_OUTPUT"
           if echo "$MSG" | grep -iqE '^release:'; then
             echo "is_release=true" >> "$GITHUB_OUTPUT"
           else
@@ -106,7 +108,7 @@ jobs:
         if: steps.msg.outputs.is_release == 'false'
         shell: bash
         run: |
-          set -euo pipefail
+          set -eo pipefail
           git fetch --tags --force --prune
           # Determine base version tag (latest pure vX.Y.Z); fallback to source if none
           BASE=$(git tag --list 'v*' | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -n1 || true)
