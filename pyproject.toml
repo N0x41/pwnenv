@@ -8,6 +8,7 @@ exclude = [
   ".git",
   "build",
   "dist",
+  "__pycache__"
 ]
 
 [tool.ruff.lint]

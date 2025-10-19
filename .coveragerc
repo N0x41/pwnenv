@@ -7,11 +7,14 @@ omit =
 	*/venv/*
 	*/.tox/*
 	tests/*
+    */__pycache__
+    */__pycache__/*
 disable_warnings = no-data-collected
 
 [report]
 show_missing = True
 skip_covered = True
+skip_empty = true
 exclude_lines =
 	pragma: no cover
 	if __name__ == .__main__.: 

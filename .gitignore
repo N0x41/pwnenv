@@ -2,3 +2,4 @@
 .venv/
 .coverage
 coverage.xml
+.gdb_history
