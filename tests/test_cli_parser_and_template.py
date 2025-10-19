@@ -2,8 +2,6 @@ from __future__ import annotations
 
 from pathlib import Path
 import types
-import subprocess
-
 
 def load_cli_module():
     cli_path = Path(__file__).resolve().parents[1] / "pwnenv"
