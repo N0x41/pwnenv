@@ -11,7 +11,7 @@ import sys
 from getpass import getpass
 from pathlib import Path
 
-PWNENV_VERSION = "3.2.0"
+PWNENV_VERSION = "3.2.1"
 CONFIG_PATH = Path.home() / ".local" / "share" / "pwnenv.json"
 DEFAULT_CONFIG = {
     "challenges_dir": str(Path.home() / "challenges"),
