@@ -123,6 +123,11 @@ jobs:
             esac
           done | sort -n | tail -n1)
           if [ -z "${LAST:-}" ]; then NEXT=1; else NEXT=$((LAST + 1)); fi
+          # Ensure chosen tag does not already exist (bump until free)
+          while git rev-parse "${BASE}-build-${NEXT}" >/dev/null 2>&1 || \
+                git ls-remote --tags origin "${BASE}-build-${NEXT}" | grep -q .; do
+            NEXT=$((NEXT + 1))
+          done
           echo "base=$BASE" >> "$GITHUB_OUTPUT"
           echo "next=$NEXT" >> "$GITHUB_OUTPUT"
           echo "tag=${BASE}-build-$NEXT" >> "$GITHUB_OUTPUT"
@@ -134,5 +139,10 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          # Skip if tag now exists (race protection)
+          if git rev-parse "$TAG" >/dev/null 2>&1 || git ls-remote --tags origin "$TAG" | grep -q .; then
+            echo "Tag $TAG already exists; skipping creation."
+            exit 0
+          fi
           git tag -a "$TAG" -m "Automated build $TAG (CI green)"
           git push origin "$TAG"
