@@ -103,7 +103,6 @@ def test_handle_init_invalid_ssh_errors(monkeypatch, tmp_path):
         source_path_option=None,
     )
 
-    import sys
     try:
         mod.handle_init(ns, paths)
         assert False, "Expected SystemExit for invalid ssh spec"
