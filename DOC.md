@@ -3,7 +3,6 @@
 
 Ce fichier contient la documentation technique qui détaille le fonctionnement interne de l'outil.
 
-```markdown
 # Documentation Technique de PwnEnv
 
 Ce document détaille l'architecture et le fonctionnement interne de l'outil `pwnenv`.
